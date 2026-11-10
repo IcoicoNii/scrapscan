@@ -1,0 +1,277 @@
+@import "tailwindcss";
+
+/* Palette from the ScrapScan design notes (Ivory, Cream, Lawn Green, Forest Moss, Dark Khaki)
+   plus the deep green and mist grey used in the login/portal mockups. */
+@theme {
+  --color-ivory: #fbfff2;
+  --color-cream: #fdffca;
+  --color-lawn: #87e925;
+  --color-moss: #6e8923;
+  --color-khaki: #252502;
+  --color-forest: #245900;
+  --color-forest-deep: #1b4300;
+  --color-mint: #d9ffc4;
+  --color-mist: #bfd3cf;
+  --color-slate-green: #2c514c;
+  --color-danger: #a4161a;
+  --color-danger-soft: #ffe8e5;
+
+  /* Neutral surfaces and hairlines, tinted toward the greens. */
+  --color-line: #e2ead5;
+  --color-line-soft: #eef3e4;
+  --color-track: #e8efdc;
+  --color-field: #7a8f89; /* input borders: 3.4:1 on white, enough for WCAG 1.4.11 */
+
+  --shadow-card: 0 1px 2px rgb(37 37 2 / 0.04), 0 4px 16px -6px rgb(36 89 0 / 0.1);
+  --shadow-lift: 0 2px 4px rgb(37 37 2 / 0.04), 0 14px 32px -10px rgb(36 89 0 / 0.22);
+  --shadow-pop: 0 4px 10px rgb(37 37 2 / 0.06), 0 28px 60px -18px rgb(27 67 0 / 0.35);
+
+  --font-sans: "Montserrat Variable", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+
+  --animate-rise: rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@layer base {
+html {
+  background: var(--color-ivory);
+  color: var(--color-khaki);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100dvh;
+  /* A faint wash of green at the top so large ivory areas don't read as flat. */
+  background:
+    radial-gradient(60rem 28rem at 85% -10%, rgb(135 233 37 / 0.1), transparent 70%),
+    radial-gradient(40rem 24rem at -10% 0%, rgb(217 255 196 / 0.45), transparent 70%),
+    var(--color-ivory);
+  background-attachment: fixed;
+}
+
+h1, h2, h3 { text-wrap: balance; letter-spacing: -0.015em; }
+p { text-wrap: pretty; }
+
+::selection { background: var(--color-lawn); color: var(--color-khaki); }
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-lawn);
+  outline-offset: 2px;
+}
+.on-light :focus-visible,
+main.on-light :focus-visible {
+  outline-color: var(--color-forest);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Each page's content eases in on navigation. The layout around it stays put. */
+.page-in > * { animation: var(--animate-rise); }
+
+@layer components {
+/* Brand surface: deep green with a soft lawn glow, used for heroes and highlight cards. */
+.surface-forest {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(135 233 37 / 0.26), transparent 55%),
+    radial-gradient(90% 70% at 0% 100%, rgb(217 255 196 / 0.1), transparent 60%),
+    linear-gradient(160deg, #2b6a00 0%, var(--color-forest) 45%, var(--color-forest-deep) 100%);
+}
+/* Fine dot grid on top, fading out toward the bottom. */
+.surface-forest::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgb(255 255 255 / 0.09) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, #000, transparent 75%);
+  pointer-events: none;
+}
+
+/* Frosted bar for sticky headers and the phone tab bar. */
+.glass-light {
+  background: rgb(255 255 255 / 0.82);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
+}
+.glass-forest {
+  background: rgb(36 89 0 / 0.92);
+  -webkit-backdrop-filter: saturate(1.4) blur(16px);
+  backdrop-filter: saturate(1.4) blur(16px);
+}
+
+/* Buttons: 48px minimum touch target. Primary uses deep green with white text (high contrast);
+   bright lawn green is reserved for dark backgrounds, where it carries dark text. */
+.btn {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.5rem 1.5rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: -0.005em;
+  transition: background-color 150ms, box-shadow 150ms, transform 150ms, opacity 150ms, border-color 150ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary {
+  background: linear-gradient(180deg, #2c6a02, var(--color-forest));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(27 67 0 / 0.3), 0 8px 20px -10px rgb(27 67 0 / 0.7);
+}
+.btn-primary:hover { background: linear-gradient(180deg, var(--color-forest), var(--color-forest-deep)); }
+.btn-lawn {
+  background: var(--color-lawn);
+  color: var(--color-khaki);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 8px 24px -10px rgb(135 233 37 / 0.8);
+}
+.btn-lawn:hover { background: #9af03f; }
+.btn-secondary { background: var(--color-mist); color: var(--color-slate-green); }
+.btn-secondary:hover { background: #adc6c1; }
+.btn-outline {
+  border: 1.5px solid var(--color-forest);
+  color: var(--color-forest);
+  background: #fff;
+}
+.btn-outline:hover { background: var(--color-mint); }
+.btn-ghost { background: transparent; color: var(--color-forest); }
+.btn-ghost:hover { background: var(--color-mint); }
+/* Translucent button for dark brand surfaces. */
+.btn-glass {
+  border: 1.5px solid rgb(255 255 255 / 0.45);
+  background: rgb(255 255 255 / 0.06);
+  color: #fff;
+}
+.btn-glass:hover { background: rgb(255 255 255 / 0.14); border-color: rgb(255 255 255 / 0.7); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+/* Smaller button for toolbars and page headers; still a 44px touch target. */
+.btn-sm { min-height: 2.75rem; padding: 0.375rem 1.125rem; font-size: 0.875rem; }
+
+/* Pill inputs from the mockups, used on the dark login card. */
+.field-pill {
+  width: 100%;
+  min-height: 3.25rem;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.08);
+  padding: 0.5rem 1.25rem;
+  font-size: 1rem;
+  transition: background-color 150ms, border-color 150ms;
+}
+.field-pill:hover { border-color: rgb(255 255 255 / 0.75); }
+.field-pill:focus { background: rgb(255 255 255 / 0.14); border-color: #fff; }
+.field-pill::placeholder { color: inherit; opacity: 0.75; }
+.field-pill[aria-invalid="true"] { border-color: #ffb4ab; }
+
+.field-box {
+  width: 100%;
+  min-height: 3rem;
+  border-radius: 0.875rem;
+  border: 1.5px solid var(--color-field);
+  background: #fff;
+  padding: 0.5rem 0.875rem;
+  font-size: 1rem;
+  color: var(--color-khaki);
+  box-shadow: 0 1px 2px rgb(37 37 2 / 0.04);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.field-box::placeholder { color: var(--color-slate-green); opacity: 0.65; }
+.field-box:hover { border-color: var(--color-slate-green); }
+.field-box:focus { border-color: var(--color-forest); box-shadow: 0 0 0 4px rgb(135 233 37 / 0.25); }
+.field-box[aria-invalid="true"] { border-color: var(--color-danger); }
+.field-box[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px rgb(164 22 26 / 0.15); }
+
+.card {
+  border-radius: 1.25rem;
+  background: #fff;
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem;
+}
+@media (min-width: 64rem) {
+  .card { padding: 1.5rem; }
+}
+/* A whole card that is a link. */
+.card-link { transition: background-color 150ms, border-color 150ms, box-shadow 200ms, transform 200ms; }
+.card-link:hover { border-color: #c4e6ae; box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+.card-link:active { transform: translateY(0); }
+
+/* Rounded-square icon holder used across cards. */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 0.875rem;
+  background: linear-gradient(145deg, #e6ffd8, var(--color-mint));
+  color: var(--color-forest);
+  box-shadow: inset 0 0 0 1px rgb(36 89 0 / 0.08);
+}
+
+/* Data tables: quiet header, hairline rows, hover highlight. */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 1.25rem;
+  border: 1px solid var(--color-line);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+.data-table { width: 100%; text-align: left; }
+.data-table thead { background: #f7faf0; }
+.data-table thead th {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-slate-green);
+  white-space: nowrap;
+}
+.data-table tbody tr { border-top: 1px solid var(--color-line-soft); transition: background-color 120ms; }
+.data-table tbody tr:hover { background: #f8fcf1; }
+
+/* Loading placeholders. The reduced-motion rule above stops the shimmer. */
+.skeleton {
+  border-radius: 1rem;
+  background: linear-gradient(90deg, var(--color-track) 0%, #f2f7ea 50%, var(--color-track) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+}
+
+/* Hide the default disclosure marker on the user menu, and ease the panel open. */
+.menu-summary { list-style: none; }
+.menu-summary::-webkit-details-marker { display: none; }
+details[open] > .menu-panel { animation: menu-pop 160ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: top right; }
+@keyframes menu-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  html, body { background: #fff !important; }
+  .card, .table-wrap { box-shadow: none !important; }
+}

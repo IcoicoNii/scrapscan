@@ -1,0 +1,230 @@
+// ScrapScan MVP schema (pilot: ~50 households, one purok)
+// Pin Prisma 6.x. engineType "client" = no Rust engine; needs the @prisma/adapter-pg driver adapter (see src/lib/db.ts).
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // used by `prisma migrate` (Neon: non-pooled URL)
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  CITIZEN
+  COLLECTOR
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum QrStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum BinResult {
+  CORRECT
+  CONTAMINATED
+}
+
+enum CollectionStatus {
+  VERIFIED
+  FLAGGED // e.g. same ID resent with a different payload; needs admin review
+}
+
+enum LedgerType {
+  AWARD           // + points, one per collection
+  REDEMPTION_HOLD // - points, created when a redemption is requested
+  REVERSAL        // opposite sign of the row it reverses, requires reason
+}
+
+enum RedemptionStatus {
+  REQUESTED
+  APPROVED
+  CLAIMED
+  REJECTED
+}
+
+// ---------- Accounts ----------
+
+model User {
+  id           String        @id @default(uuid())
+  email        String?       @unique // at least one of email/phone (CHECK in db-constraints.sql)
+  phone        String?       @unique // normalized +639XXXXXXXXX
+  passwordHash String
+  name         String
+  role         Role
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+
+  // Only set for CITIZEN users (the household they claimed)
+  householdId String?
+  household   Household? @relation(fields: [householdId], references: [id])
+
+  collections       Collection[]  @relation("CollectorCollections")
+  ledgerActions     PointsLedger[] @relation("LedgerActor")
+  decidedRedemptions Redemption[] @relation("RedemptionDecider")
+  auditLogs         AuditLog[]
+
+  @@index([householdId])
+}
+
+// Admin creates households (source of truth). A resident signs up by
+// entering the claimCode printed on their QR sheet.
+model Household {
+  id        String        @id @default(uuid())
+  code      String        @unique // human-readable, e.g. HH-00421 (manual entry fallback)
+  name      String
+  address   String
+  purok     String
+  status    AccountStatus @default(ACTIVE)
+  claimCode String        @unique
+  claimedAt DateTime?
+  createdAt DateTime      @default(now())
+
+  members     User[]
+  qrCodes     QrCode[]
+  collections Collection[]
+  ledger      PointsLedger[]
+  redemptions Redemption[]
+
+  @@index([purok])
+}
+
+// QR encodes only an opaque random token. No personal data.
+// Revocation = set status REVOKED, then issue a new row.
+model QrCode {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id])
+  status      QrStatus  @default(ACTIVE)
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([householdId, status])
+}
+
+// ---------- Collections ----------
+
+// id is generated on the collector's device (UUID) and doubles as the
+// idempotency key. Same id sent twice => return the stored row, never re-award.
+model Collection {
+  id           String @id @db.Uuid
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id])
+  collectorId  String
+  collector    User      @relation("CollectorCollections", fields: [collectorId], references: [id])
+
+  collectedAt  DateTime  // device time when the collection was recorded
+  collectionDay DateTime @db.Date // derived server-side in Asia/Manila from collectedAt
+  receivedAt   DateTime  @default(now()) // server time (differs when synced late)
+
+  biodegradable BinResult
+  recyclable    BinResult
+  residual      BinResult
+
+  score        Int // computed ONLY on the server (10 / 5 / 0)
+  status       CollectionStatus @default(VERIFIED)
+  payloadHash  String           // detects same-id / different-payload retries
+  flagReason   String?
+
+  ledgerEntries PointsLedger[]
+
+  // Guard against double-scanning the same household on the same day.
+  @@unique([householdId, collectionDay])
+  @@index([collectedAt])
+  @@index([collectorId])
+}
+
+// ---------- Points ledger (append-only) ----------
+// Balance = SUM(points) WHERE householdId = ?
+// UPDATE/DELETE are blocked at the DB level (see ledger-immutability.sql).
+
+model PointsLedger {
+  id          String     @id @default(uuid())
+  householdId String
+  household   Household  @relation(fields: [householdId], references: [id])
+  type        LedgerType
+  points      Int        // signed
+
+  // At most one AWARD per collection (null for non-award rows; Postgres allows many NULLs)
+  collectionId String?     @unique @db.Uuid
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+
+  redemptionId String?
+  redemption   Redemption? @relation(fields: [redemptionId], references: [id])
+
+  // A row can be reversed at most once
+  reversesId String?       @unique
+  reverses   PointsLedger? @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy PointsLedger? @relation("Reversal")
+
+  reason  String?  // required when type = REVERSAL (enforce in the service layer)
+  actorId String?  // admin who did it; null for system awards
+  actor   User?    @relation("LedgerActor", fields: [actorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([householdId, createdAt])
+}
+
+// ---------- Rewards ----------
+
+model Reward {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  pointsCost  Int
+  stock       Int?     // null = unlimited
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  redemptions Redemption[]
+}
+
+model Redemption {
+  id          String           @id @default(uuid())
+  householdId String
+  household   Household        @relation(fields: [householdId], references: [id])
+  rewardId    String
+  reward      Reward           @relation(fields: [rewardId], references: [id])
+  status      RedemptionStatus @default(REQUESTED)
+  pointsHeld  Int              // snapshot of cost at request time
+  requestedAt DateTime         @default(now())
+
+  decidedById String?
+  decidedBy   User?     @relation("RedemptionDecider", fields: [decidedById], references: [id])
+  decidedAt   DateTime?
+  note        String?
+
+  ledger PointsLedger[]
+
+  @@index([householdId])
+  @@index([status])
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String   // e.g. "qr.revoke", "points.reverse", "reward.update"
+  targetType String
+  targetId   String
+  reason     String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}

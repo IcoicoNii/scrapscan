@@ -40,6 +40,16 @@ export default function PrivacyPage() {
           </p>
         </section>
         <section>
+          <h2>What’s kept on collectors’ phones</h2>
+          <p>
+            So collections can be recorded where there’s no signal, a collector’s phone keeps a short list of households:
+            the household number, household name and purok, plus a scrambled fingerprint of each QR code (not the code
+            itself). It never includes addresses, residents’ names or contact details. The list is deleted when the
+            collector logs out, and automatically if it hasn’t been updated for 7 days. Collections recorded offline stay
+            on the phone only until they’re sent.
+          </p>
+        </section>
+        <section>
           <h2>Your choices</h2>
           <p>
             You can ask your barangay office to correct your details or close your account. This follows the Data Privacy

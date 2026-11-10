@@ -24,6 +24,8 @@ run("POST /api/collections against the real database", async () => {
   const { createSession } = await import("@/lib/session");
   const { POST } = await import("../route");
   const { POST: LOOKUP } = await import("../../households/lookup/route");
+  const { GET: DIRECTORY } = await import("../../collector/directory/route");
+  const { qrTokenHash } = await import("@/lib/directory");
 
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase();
   const users: Record<"collector" | "otherCollector" | "citizen" | "admin", string> = {} as never;
@@ -267,6 +269,33 @@ run("POST /api/collections against the real database", async () => {
     expect((await lookup({ qrToken: hh[0].token })).status).toBe(403);
     jar.clear();
     expect((await lookup({ qrToken: hh[0].token })).status).toBe(401);
+  });
+
+  it("gives collectors a minimal household list for offline scanning", async () => {
+    const res = await DIRECTORY();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = await res.json();
+    const mine = new Map<string, Record<string, unknown>>(
+      body.households.filter((h: { code: string }) => h.code.startsWith(`CT-${tag}-`)).map((h: { code: string }) => [h.code, h]),
+    );
+    // Only these fields, nothing else (no address, claim code, ids or raw tokens).
+    for (const h of mine.values()) expect(Object.keys(h).sort()).toEqual(["code", "lastCollectionDay", "name", "purok", "qrHashes"]);
+    expect(JSON.stringify(body)).not.toContain(hh[0].token);
+
+    expect(mine.get(hh[0].code)).toMatchObject({ qrHashes: [qrTokenHash(hh[0].token)], lastCollectionDay: expect.any(String) });
+    expect(mine.get(hh[9].code)).toMatchObject({ lastCollectionDay: null });
+    expect(mine.get(hh[7].code)).toMatchObject({ qrHashes: [] }); // its QR was revoked
+    expect(mine.has(hh[8].code)).toBe(false); // inactive households are left out
+  });
+
+  it("only collectors get the household list", async () => {
+    await signInAs("citizen");
+    expect((await DIRECTORY()).status).toBe(403);
+    await signInAs("admin");
+    expect((await DIRECTORY()).status).toBe(403);
+    jar.clear();
+    expect((await DIRECTORY()).status).toBe(401);
   });
 
   it("the database refuses to edit or delete ledger rows", async () => {

@@ -8,24 +8,38 @@ import { Icon } from "@/components/icons";
 import { Notice } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { newCollectionId, QR_PREFIX, type CollectionInput, type HouseholdRef } from "@/lib/collection-input";
-import type { CollectionSummary, HouseholdLookup, RecordResult } from "@/lib/collections";
+import type { CollectionSummary, HouseholdLookup } from "@/lib/collections";
+import {
+  dismiss,
+  enqueue,
+  lookupOffline,
+  onItemResult,
+  sendNow,
+  sendUnstored,
+  type SendOutcome,
+} from "@/lib/offline/queue";
 import { QrScanner } from "./qr-scanner";
 
-// Find household -> check bins -> send -> result. The score is never worked out here: the server
-// decides it and this screen shows what came back.
+// Find household -> check bins -> save -> result.
+// Saving always writes to the phone first (offline queue), then tries to send. The score is never
+// worked out here: the server decides it, and this screen shows what came back.
 
 type Bins = CollectionInput["bins"];
-type Household = Extract<HouseholdLookup, { ok: true }>["household"];
+type Household = { code: string; name: string; purok: string; address?: string };
+/** null household = not confirmed (scanned offline, not on this phone's list yet). */
+type MaybeHousehold = Household | null;
+type QueuedReason = "offline" | "signed-out" | "forbidden";
 
 type State =
   | { step: "find"; message?: string }
   | { step: "looking"; ref: HouseholdRef }
-  | { step: "already"; household: Household; collection: CollectionSummary }
-  | { step: "check"; ref: HouseholdRef; household: Household }
-  | { step: "sending"; payload: CollectionInput; household: Household }
-  // `payload` is frozen once sent: a retry must resend exactly the same id and details.
-  | { step: "failed"; payload: CollectionInput; household: Household; message: string; retry: boolean; signedOut?: boolean }
-  | { step: "rejected"; household: Household; message: string; collection?: CollectionSummary }
+  | { step: "already"; household: Household; collectedAt?: string; score?: number; fromPhone: boolean }
+  | { step: "check"; ref: HouseholdRef; household: MaybeHousehold; offline: boolean }
+  | { step: "saving"; payload: CollectionInput; household: MaybeHousehold }
+  | { step: "queued"; payload: CollectionInput; household: MaybeHousehold; reason: QueuedReason }
+  // Only when this browser can't store scans: the payload is frozen so Try again resends the same id.
+  | { step: "failed"; payload: CollectionInput; household: MaybeHousehold; message: string }
+  | { step: "rejected"; household: MaybeHousehold; message: string; collection?: CollectionSummary }
   | { step: "done"; collection: CollectionSummary };
 
 const BINS: { key: keyof Bins; label: string; hint: string }[] = [
@@ -34,19 +48,31 @@ const BINS: { key: keyof Bins; label: string; hint: string }[] = [
   { key: "residual", label: "Residual", hint: "Everything that can’t be composted or recycled" },
 ];
 
-const NO_SIGNAL = "No connection. Move to a spot with signal and try again.";
+const LOOKUP_TIMEOUT_MS = 6000; // weak signal: fall back to the phone's list instead of waiting
 
-async function postJson<T>(url: string, body: unknown): Promise<{ status: number; json: T | null } | null> {
+/** Online lookup. null = couldn't reach the server (offline, timeout, signed out, server error). */
+async function lookupOnline(ref: HouseholdRef): Promise<HouseholdLookup | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LOOKUP_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const json = (await res.json().catch(() => null)) as T | null;
-    return { status: res.status, json };
+    const res = await fetch("/api/households/lookup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(ref),
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    if (res.status === 401 || res.status >= 500) return null;
+    const json = (await res.json().catch(() => null)) as HouseholdLookup | null;
+    return json && "ok" in json ? json : null;
   } catch {
-    return null; // network error
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-export function ScanFlow() {
+export function ScanFlow({ collectorId }: { collectorId: string }) {
   const [state, setState] = useState<State>({ step: "find" });
   const [code, setCode] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -56,17 +82,50 @@ export function ScanFlow() {
     headingRef.current?.focus();
   }, [state.step]);
 
-  const lookup = useCallback(async (ref: HouseholdRef) => {
-    setState({ step: "looking", ref });
-    const res = await postJson<HouseholdLookup>("/api/households/lookup", ref);
-    if (!res) return setState({ step: "find", message: NO_SIGNAL });
-    if (res.status === 401) return setState({ step: "find", message: "You’ve been signed out. Sign in again to keep scanning." });
-    const r = res.json;
-    if (!r || !("ok" in r)) return setState({ step: "find", message: "Something went wrong. Try again." });
-    if (!r.ok) return setState({ step: "find", message: r.message });
-    if (r.collectedToday) return setState({ step: "already", household: r.household, collection: r.collectedToday });
-    setState({ step: "check", ref, household: r.household });
-  }, []);
+  // While "Saved on this phone" is showing, switch to the result if it sends in the background.
+  const queuedId = state.step === "queued" ? state.payload.id : null;
+  const queuedHousehold = state.step === "queued" ? state.household : null;
+  useEffect(() => {
+    if (!queuedId) return;
+    return onItemResult((id, o) => {
+      if (id !== queuedId) return;
+      if (o.kind === "sent") setState({ step: "done", collection: o.collection });
+      if (o.kind === "rejected") {
+        dismiss(id, collectorId); // the collector is reading the reason right now
+        setState({ step: "rejected", household: queuedHousehold, message: o.message, collection: o.collection });
+      }
+    });
+  }, [queuedId, queuedHousehold, collectorId]);
+
+  const lookup = useCallback(
+    async (ref: HouseholdRef) => {
+      setState({ step: "looking", ref });
+      const r = await lookupOnline(ref);
+      if (r) {
+        if (!r.ok) return setState({ step: "find", message: r.message });
+        if (r.collectedToday) {
+          const c = r.collectedToday;
+          return setState({ step: "already", household: r.household, collectedAt: c.collectedAt, score: c.score, fromPhone: false });
+        }
+        return setState({ step: "check", ref, household: r.household, offline: false });
+      }
+
+      // Couldn't reach the server: use the list saved on this phone.
+      const off = await lookupOffline(collectorId, ref).catch(() => ({ found: false as const, haveList: false }));
+      if (off.found) {
+        const { code: hc, name, purok } = off.household;
+        const household = { code: hc, name, purok };
+        if (off.collectedToday) return setState({ step: "already", household, fromPhone: true });
+        return setState({ step: "check", ref, household, offline: true });
+      }
+      if ("code" in ref && off.haveList) {
+        return setState({ step: "find", message: "No household has that number on this phone’s list. Check the number and try again." });
+      }
+      // A QR not on the list (maybe a new household) or no list at all: save it unconfirmed.
+      setState({ step: "check", ref, household: null, offline: true });
+    },
+    [collectorId],
+  );
 
   const onScan = useCallback(
     (text: string) => {
@@ -79,23 +138,54 @@ export function ScanFlow() {
     [lookup],
   );
 
-  const send = useCallback(async (payload: CollectionInput, household: Household) => {
-    setState({ step: "sending", payload, household });
-    const res = await postJson<RecordResult>("/api/collections", payload);
-    if (!res) return setState({ step: "failed", payload, household, message: NO_SIGNAL, retry: true });
-    if (res.status === 401) {
-      return setState({
-        step: "failed", payload, household, retry: true, signedOut: true,
-        message: "You’ve been signed out. Sign in again in a new tab, then come back and tap Try again.",
-      });
-    }
-    const r = res.json;
-    if (res.status >= 500 || !r || !("ok" in r)) {
-      return setState({ step: "failed", payload, household, message: "The server had a problem. Try again in a moment.", retry: true });
-    }
-    if (r.ok) return setState({ step: "done", collection: r.collection });
-    setState({ step: "rejected", household, message: r.message, collection: r.collection });
+  const show = useCallback(
+    (o: SendOutcome, payload: CollectionInput, household: MaybeHousehold) => {
+      switch (o.kind) {
+        case "sent":
+          return setState({ step: "done", collection: o.collection });
+        case "rejected":
+          dismiss(payload.id, collectorId);
+          return setState({ step: "rejected", household, message: o.message, collection: o.collection });
+        case "queued":
+          return setState({ step: "queued", payload, household, reason: "offline" });
+        default:
+          return setState({ step: "queued", payload, household, reason: o.kind });
+      }
+    },
+    [collectorId],
+  );
+
+  const sendWithoutStorage = useCallback(async (payload: CollectionInput, household: MaybeHousehold) => {
+    setState({ step: "saving", payload, household });
+    const o = await sendUnstored(payload);
+    if (o.kind === "sent") return setState({ step: "done", collection: o.collection });
+    if (o.kind === "rejected") return setState({ step: "rejected", household, message: o.message, collection: o.collection });
+    setState({
+      step: "failed",
+      payload,
+      household,
+      message:
+        o.kind === "signed-out"
+          ? "You’ve been signed out. Sign in again in a new tab, then come back and tap Try again."
+          : "No connection, and this browser can’t save scans on the phone. Move to a spot with signal and try again.",
+    });
   }, []);
+
+  const save = useCallback(
+    async (ref: HouseholdRef, household: MaybeHousehold, bins: Bins) => {
+      const payload: CollectionInput = { id: newCollectionId(), household: ref, collectedAt: new Date().toISOString(), bins };
+      setState({ step: "saving", payload, household });
+      const stored = await enqueue({
+        id: payload.id,
+        collectorId,
+        payload,
+        household: household && { code: household.code, name: household.name, purok: household.purok },
+      });
+      if (!stored) return sendWithoutStorage(payload, household);
+      show(await sendNow(payload.id, collectorId), payload, household);
+    },
+    [collectorId, sendWithoutStorage, show],
+  );
 
   const reset = () => {
     setCode("");
@@ -106,6 +196,13 @@ export function ScanFlow() {
     <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-extrabold tracking-tight">
       {text}
     </h2>
+  );
+
+  const scanNext = (
+    <button type="button" onClick={reset} className="btn btn-primary w-full py-4 text-lg">
+      <Icon name="qr" className="h-6 w-6" />
+      Scan next household
+    </button>
   );
 
   switch (state.step) {
@@ -152,27 +249,60 @@ export function ScanFlow() {
           {heading("Already collected today")}
           <HouseholdCard household={state.household} />
           <Notice>
-            This household was collected at {formatDateTime(new Date(state.collection.collectedAt))} and earned{" "}
-            {state.collection.score} points. Only one collection per household is recorded each day.
+            {state.fromPhone
+              ? "This household already has a collection today (recorded earlier, or saved on this phone). "
+              : `This household was collected at ${formatDateTime(new Date(state.collectedAt!))} and earned ${state.score} points. `}
+            Only one collection per household is recorded each day.
           </Notice>
-          <button type="button" onClick={reset} className="btn btn-primary w-full py-4 text-lg">
-            <Icon name="qr" className="h-6 w-6" />
-            Scan next household
-          </button>
+          {scanNext}
         </div>
       );
 
     case "check":
-      return <Checklist key={state.household.code} household={state.household} onBack={reset} onSubmit={(bins) =>
-        send({ id: newCollectionId(), household: state.ref, collectedAt: new Date().toISOString(), bins }, state.household)
-      } headingRef={headingRef} />;
+      return (
+        <Checklist
+          key={state.household?.code ?? "unconfirmed"}
+          household={state.household}
+          offline={state.offline}
+          onBack={reset}
+          onSubmit={(bins) => save(state.ref, state.household, bins)}
+          headingRef={headingRef}
+        />
+      );
 
-    case "sending":
+    case "saving":
       return (
         <div className="space-y-5" aria-busy="true">
           {heading("Saving…")}
           <HouseholdCard household={state.household} />
           <BinChips bins={state.payload.bins} />
+        </div>
+      );
+
+    case "queued":
+      return (
+        <div className="space-y-5">
+          {heading("Saved on this phone")}
+          <HouseholdCard household={state.household} />
+          <BinChips bins={state.payload.bins} />
+          <Notice>
+            {state.reason === "signed-out"
+              ? "You’re signed out, so it can’t be sent yet. It’s safe on this phone and will send after you sign in."
+              : state.reason === "forbidden"
+                ? "This account can’t record collections right now. It’s kept on this phone. Ask your barangay admin."
+                : "No signal right now. It’s safe on this phone and will send automatically when you’re back online. Its points will show once it’s sent."}
+          </Notice>
+          <div className="grid gap-3">
+            {scanNext}
+            {state.reason === "signed-out" && (
+              <a href="/login" className="btn btn-outline w-full">
+                Sign in
+              </a>
+            )}
+            <Link href="/collector/queue" className="btn btn-ghost w-full">
+              See saved scans
+            </Link>
+          </div>
         </div>
       );
 
@@ -184,16 +314,9 @@ export function ScanFlow() {
           <Notice tone="warn">{state.message}</Notice>
           <BinChips bins={state.payload.bins} />
           <div className="grid gap-3">
-            {state.retry && (
-              <button type="button" onClick={() => send(state.payload, state.household)} className="btn btn-primary w-full py-4 text-lg">
-                Try again
-              </button>
-            )}
-            {state.signedOut && (
-              <a href="/login" target="_blank" rel="noopener" className="btn btn-outline w-full">
-                Sign in (opens a new tab)
-              </a>
-            )}
+            <button type="button" onClick={() => sendWithoutStorage(state.payload, state.household)} className="btn btn-primary w-full py-4 text-lg">
+              Try again
+            </button>
             <button type="button" onClick={reset} className="btn btn-ghost w-full">
               Discard and scan another
             </button>
@@ -215,10 +338,7 @@ export function ScanFlow() {
               <p className="font-bold">{state.collection.score} points</p>
             </div>
           )}
-          <button type="button" onClick={reset} className="btn btn-primary w-full py-4 text-lg">
-            <Icon name="qr" className="h-6 w-6" />
-            Scan next household
-          </button>
+          {scanNext}
         </div>
       );
 
@@ -249,7 +369,22 @@ export function ScanFlow() {
   }
 }
 
-function HouseholdCard({ household }: { household: Household }) {
+function HouseholdCard({ household }: { household: MaybeHousehold }) {
+  if (!household) {
+    return (
+      <div className="card flex items-start gap-4">
+        <span className="icon-tile h-12 w-12 shrink-0 rounded-2xl">
+          <Icon name="info" className="h-6 w-6" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-lg font-bold leading-tight">Household not confirmed yet</p>
+          <p className="mt-0.5 text-sm text-slate-green">
+            This QR code isn’t on this phone’s list. It will be checked when the scan is sent.
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card flex items-start gap-4">
       <span className="icon-tile h-12 w-12 shrink-0 rounded-2xl">
@@ -259,7 +394,8 @@ function HouseholdCard({ household }: { household: Household }) {
         <p className="text-lg font-bold leading-tight">{household.name}</p>
         <p className="text-sm font-semibold text-forest">{household.code}</p>
         <p className="mt-0.5 text-sm text-slate-green">
-          {household.address} · {household.purok}
+          {household.address ? `${household.address} · ` : ""}
+          {household.purok}
         </p>
       </div>
     </div>
@@ -268,11 +404,13 @@ function HouseholdCard({ household }: { household: Household }) {
 
 function Checklist({
   household,
+  offline,
   onBack,
   onSubmit,
   headingRef,
 }: {
-  household: Household;
+  household: MaybeHousehold;
+  offline: boolean;
   onBack: () => void;
   onSubmit: (bins: Bins) => void;
   headingRef: React.RefObject<HTMLHeadingElement | null>;
@@ -292,6 +430,9 @@ function Checklist({
       <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-extrabold tracking-tight">
         Check the bins
       </h2>
+      {offline && (
+        <Notice>No signal. You can still check the bins: the scan will be saved on this phone and sent later.</Notice>
+      )}
       <HouseholdCard household={household} />
       <button type="button" onClick={onBack} className="btn btn-ghost btn-sm -mt-2">
         <Icon name="arrow-left" className="h-5 w-5" />
@@ -338,7 +479,7 @@ function Checklist({
         Save collection
       </button>
       <p id="submit-note" className="-mt-2 text-center text-sm text-slate-green">
-        {complete ? "Points are worked out on the server when you save." : "Choose Correct or Contaminated for all three bins."}
+        {complete ? "Points are worked out on the server when it’s sent." : "Choose Correct or Contaminated for all three bins."}
       </p>
     </form>
   );

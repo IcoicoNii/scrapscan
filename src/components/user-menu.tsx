@@ -3,13 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { logoutAction } from "@/app/actions/auth";
 import { initials } from "@/lib/format";
 import { Icon } from "./icons";
+import { LogoutForm } from "./logout-form";
 
 // Mobile account menu. <details> works without JS; the effect only closes it after navigating,
 // because the shell (and so this menu) stays mounted between pages.
-export function UserMenu({ userName, roleLabel, profileHref }: { userName: string; roleLabel: string; profileHref?: string }) {
+export function UserMenu({
+  userName,
+  roleLabel,
+  profileHref,
+  offlineData,
+}: {
+  userName: string;
+  roleLabel: string;
+  profileHref?: string;
+  offlineData?: boolean;
+}) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
   useEffect(() => {
@@ -44,12 +54,13 @@ export function UserMenu({ userName, roleLabel, profileHref }: { userName: strin
             Profile
           </Link>
         )}
-        <form action={logoutAction}>
-          <button className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left font-semibold transition-colors hover:bg-mint">
-            <Icon name="logout" className="h-5 w-5 text-forest" />
-            Log out
-          </button>
-        </form>
+        <LogoutForm
+          offlineData={offlineData}
+          className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left font-semibold transition-colors hover:bg-mint"
+        >
+          <Icon name="logout" className="h-5 w-5 text-forest" />
+          Log out
+        </LogoutForm>
       </div>
     </details>
   );

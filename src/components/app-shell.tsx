@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { logoutAction } from "@/app/actions/auth";
 import { BrandMark, Wordmark } from "./brand";
 import { Icon } from "./icons";
 import { NavLinks, type NavItem } from "./nav-links";
 import { initials } from "@/lib/format";
 import { UserMenu } from "./user-menu";
+import { LogoutForm } from "./logout-form";
 
 type Props = {
   roleLabel: string;
@@ -12,12 +12,14 @@ type Props = {
   homeHref: string;
   profileHref?: string;
   nav: NavItem[];
+  /** Collector pages: logout warns about unsent scans and clears offline data first. */
+  offlineData?: boolean;
   children: React.ReactNode;
 };
 
 // Phone: top bar with account menu + bottom tabs. md: icon rail. lg: full sidebar.
 // The sidebar is sticky so it stays in view on long pages. Same routes and content markup everywhere.
-export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, children }: Props) {
+export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, offlineData, children }: Props) {
   return (
     <div className="on-light min-h-dvh md:grid md:grid-cols-[5rem_1fr] lg:grid-cols-[16.5rem_1fr]">
       <aside className="surface-forest no-print sticky top-0 hidden h-dvh flex-col px-3 py-5 md:flex lg:px-4">
@@ -47,15 +49,14 @@ export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, chil
               <p className="truncate text-xs text-mint">{roleLabel}</p>
             </div>
           </div>
-          <form action={logoutAction}>
-            <button
-              title="Log out"
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-2 text-sm font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white lg:mt-2 lg:justify-start lg:px-3"
-            >
-              <Icon name="logout" className="h-5 w-5" />
-              <span className="sr-only lg:not-sr-only">Log out</span>
-            </button>
-          </form>
+          <LogoutForm
+            offlineData={offlineData}
+            title="Log out"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-2 text-sm font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white lg:mt-2 lg:justify-start lg:px-3"
+          >
+            <Icon name="logout" className="h-5 w-5" />
+            <span className="sr-only lg:not-sr-only">Log out</span>
+          </LogoutForm>
         </div>
       </aside>
 
@@ -65,7 +66,7 @@ export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, chil
             <BrandMark className="h-8 w-8 text-lawn" />
             <Wordmark className="text-lg" />
           </Link>
-          <UserMenu userName={userName} roleLabel={roleLabel} profileHref={profileHref} />
+          <UserMenu userName={userName} roleLabel={roleLabel} profileHref={profileHref} offlineData={offlineData} />
         </header>
 
         <main

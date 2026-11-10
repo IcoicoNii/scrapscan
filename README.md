@@ -47,10 +47,23 @@ npm test        # unit tests always; the auth/RBAC integration tests run when DA
   final, 5xx/network keep queued and retry with the same id.
 - **Scan screen:** `/collector/scan`. Camera QR scanning uses the browser's `BarcodeDetector` where available and
   falls back to `jsqr` (iPhones). `POST /api/households/lookup` confirms the household (and whether it was already
-  collected today) before the bin checklist. A failed save keeps the exact payload so "Try again" resends the same id.
+  collected today) before the bin checklist.
+- **Offline scanning** (it's a web app, so this is all browser tech: IndexedDB + a service worker, no app store):
+  - Every save is written to the phone (IndexedDB, `src/lib/offline/queue.ts`) *before* it's sent; queued payloads are
+    never changed, so retries are idempotent. Items belong to the collector who saved them and are only sent by that
+    collector's session. Sending happens while the page is open: on load, when back online, when the app returns to the
+    front, and on a backoff timer (30s → 10m). Refused items go to **Saved → Needs attention** with the server's reason.
+  - `GET /api/collector/directory` gives the phone a minimal household list for offline lookups: number, name, purok,
+    SHA-256 fingerprints of active QR tokens (never the tokens), last collection day. No addresses, claim codes or
+    contacts. It's only used by the collector who downloaded it, deleted on logout, and expires after 7 days.
+  - `public/sw.js` makes `/collector`, `/collector/scan` and `/collector/queue` open with no signal (network first, saved
+    copy as fallback) and caches `/_next/static` build files. It's registered in production builds only. Saved pages are
+    deleted on logout. Bump `VERSION` in `sw.js` to drop old caches.
+  - Limits of a web app: nothing sends while the browser is closed (open ScrapScan when back in signal); iPhone Safari may
+    clear site data after ~7 days unused unless it's added to the Home Screen; camera and offline loading need HTTPS.
 - **Neon:** `DATABASE_URL` = pooled string, `DIRECT_URL` = direct string.
 
 ## Not built yet (shown as unavailable in the UI, never as dead buttons)
 
-Offline queue for scans (a failed save can be retried, but isn't kept after leaving the page), reward requests, collector management,
+Admin review of flagged collections, reward requests, collector management,
 analytics charts, password reset by email, QR sticker print sheet, Filipino/English toggle.

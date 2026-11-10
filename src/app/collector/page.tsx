@@ -5,6 +5,7 @@ import { requirePagePermission } from "@/lib/auth";
 import { formatPoints } from "@/lib/format";
 import { Icon } from "@/components/icons";
 import { PageHeader, SectionCard, StatCard } from "@/components/ui";
+import { SyncStatusCard } from "./sync-status-card";
 
 export const metadata: Metadata = { title: "Collector home" };
 
@@ -37,12 +38,12 @@ export default async function CollectorHome() {
             <Icon name="qr" className="h-7 w-7" />
             Scan household QR
           </Link>
-          <p className="mt-3 text-sm text-mint">No QR code on the container? You can type the household number instead.</p>
+          <p className="mt-3 text-sm text-mint">Works without signal too. Scans are saved on this phone and sent when you’re back online.</p>
         </section>
 
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
           <StatCard label="Collections recorded" value={formatPoints(mine)} icon="check" />
-          <StatCard label="Waiting to sync" value={0} note="Saving scans offline is coming next. For now you need signal to save." icon="clock" />
+          <SyncStatusCard collectorId={user.id} />
         </div>
       </div>
 

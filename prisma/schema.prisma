@@ -37,7 +37,7 @@ enum BinResult {
 
 enum CollectionStatus {
   VERIFIED
-  FLAGGED // e.g. same ID resent with a different payload; needs admin review
+  FLAGGED // e.g. same ID resent with a different payload; needs admin review. Its points are held by a REVERSAL row.
 }
 
 enum LedgerType {

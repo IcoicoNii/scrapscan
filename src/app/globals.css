@@ -66,6 +66,10 @@ p { text-wrap: pretty; }
   outline: 3px solid var(--color-lawn);
   outline-offset: 2px;
 }
+/* Headings etc. that only receive focus from code (to guide screen readers) aren't tab stops: no ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
 .on-light :focus-visible,
 main.on-light :focus-visible {
   outline-color: var(--color-forest);

@@ -17,7 +17,8 @@ export default async function AdminOverview() {
     db.household.count({ where: { status: "ACTIVE", claimedAt: { not: null } } }),
     db.user.count({ where: { role: "COLLECTOR", status: "ACTIVE" } }),
     db.collection.count({ where: { status: "VERIFIED" } }),
-    db.pointsLedger.aggregate({ where: { type: "AWARD" }, _sum: { points: true } }),
+    // Awards on verified collections only: a flagged collection's points are on hold.
+    db.pointsLedger.aggregate({ where: { type: "AWARD", collection: { status: "VERIFIED" } }, _sum: { points: true } }),
   ]);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatPoints } from "@/lib/format";
@@ -7,11 +8,10 @@ import { PageHeader, SectionCard, StatCard } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Collector home" };
 
-// Describes the planned flow only. Nothing here is a control.
 const steps = [
   "Scan the QR code on the household’s container, or type the household number.",
   "Check each bin: biodegradable, recyclable and residual.",
-  "Submit. Points are worked out on the server and the household sees them right away.",
+  "Save. Points are worked out on the server and the household sees them right away.",
 ];
 
 export default async function CollectorHome() {
@@ -23,7 +23,6 @@ export default async function CollectorHome() {
       <PageHeader eyebrow="Collector portal" title={`Hello, ${user.name.split(" ")[0]}`} />
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-        {/* The scan flow is the next build step. Disabled and labeled so nothing here is a dead button. */}
         <section aria-labelledby="scan-h" className="surface-forest rounded-[1.75rem] p-6 text-center shadow-lift lg:p-10">
           <h2 id="scan-h" className="sr-only">
             Scan
@@ -34,22 +33,20 @@ export default async function CollectorHome() {
               <Icon name="qr" className="h-12 w-12 text-lawn" />
             </span>
           </span>
-          <button type="button" disabled aria-describedby="scan-note" className="btn btn-lawn mt-6 w-full py-5 text-lg">
+          <Link href="/collector/scan" className="btn btn-lawn mt-6 w-full py-5 text-lg">
             <Icon name="qr" className="h-7 w-7" />
             Scan household QR
-          </button>
-          <p id="scan-note" className="mt-3 text-sm text-mint">
-            Scanning isn’t available yet. It’s the next piece being built.
-          </p>
+          </Link>
+          <p className="mt-3 text-sm text-mint">No QR code on the container? You can type the household number instead.</p>
         </section>
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
           <StatCard label="Collections recorded" value={formatPoints(mine)} icon="check" />
-          <StatCard label="Waiting to sync" value={0} note="Scans saved offline will show here." icon="clock" />
+          <StatCard label="Waiting to sync" value={0} note="Saving scans offline is coming next. For now you need signal to save." icon="clock" />
         </div>
       </div>
 
-      <SectionCard id="how" title="How scanning will work">
+      <SectionCard id="how" title="How scanning works">
         <ol className="grid gap-4 md:grid-cols-3">
           {steps.map((s, i) => (
             <li key={s} className="flex gap-3">

@@ -11,6 +11,7 @@ export default async function CollectorLayout({ children }: { children: React.Re
       userName={user.name}
       nav={[
         { href: "/collector", label: "Home", icon: "home", exact: true },
+        { href: "/collector/scan", label: "Scan", icon: "qr" },
         { href: "/collector/profile", label: "Profile", icon: "user" },
       ]}
     >

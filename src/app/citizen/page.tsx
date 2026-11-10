@@ -106,9 +106,18 @@ export default async function CitizenHome() {
               <div className="space-y-3">
                 <p className="flex items-baseline justify-between gap-3">
                   <span className="text-sm text-slate-green">{formatDate(latest.collectedAt)}</span>
-                  <span className="text-xl font-extrabold tabular-nums text-forest">+{latest.score} pts</span>
+                  {latest.status === "FLAGGED" ? (
+                    <span className="text-sm font-semibold tabular-nums text-slate-green">{latest.score} pts on hold</span>
+                  ) : (
+                    <span className="text-xl font-extrabold tabular-nums text-forest">+{latest.score} pts</span>
+                  )}
                 </p>
                 <BinChips bins={latest} />
+                {latest.status === "FLAGGED" && (
+                  <p className="text-sm font-semibold text-danger">
+                    Under review by your barangay admin. These points are on hold until it’s checked.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-slate-green">

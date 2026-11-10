@@ -16,7 +16,7 @@ export default async function HistoryPage() {
         take: 50,
       })
     : [];
-  // Flagged collections are under review, so they are left out of the total.
+  // Flagged collections are under review and their points are held in the ledger, so they're left out here too.
   const earned = rows.reduce((sum, c) => (c.status === "VERIFIED" ? sum + c.score : sum), 0);
 
   return (
@@ -41,10 +41,18 @@ export default async function HistoryPage() {
               <li key={c.id} className="card space-y-3">
                 <p className="flex items-baseline justify-between gap-3">
                   <span className="text-sm font-semibold">{formatDateTime(c.collectedAt)}</span>
-                  <span className="text-lg font-extrabold tabular-nums text-forest">+{c.score} pts</span>
+                  {c.status === "FLAGGED" ? (
+                    <span className="text-sm font-semibold tabular-nums text-slate-green">{c.score} pts on hold</span>
+                  ) : (
+                    <span className="text-lg font-extrabold tabular-nums text-forest">+{c.score} pts</span>
+                  )}
                 </p>
                 <BinChips bins={c} />
-                {c.status === "FLAGGED" && <p className="text-sm font-semibold text-danger">Under review by your barangay admin.</p>}
+                {c.status === "FLAGGED" && (
+                  <p className="text-sm font-semibold text-danger">
+                    Under review by your barangay admin. These points are on hold until it’s checked.
+                  </p>
+                )}
               </li>
             ))}
           </ul>
@@ -72,7 +80,11 @@ export default async function HistoryPage() {
                     <td className="px-4 py-3">
                       {c.status === "FLAGGED" ? <span className="font-semibold text-danger">Under review</span> : "Verified"}
                     </td>
-                    <td className="px-4 py-3 text-right text-base font-extrabold tabular-nums text-forest">+{c.score}</td>
+                    {c.status === "FLAGGED" ? (
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-green">{c.score} on hold</td>
+                    ) : (
+                      <td className="px-4 py-3 text-right text-base font-extrabold tabular-nums text-forest">+{c.score}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>

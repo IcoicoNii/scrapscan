@@ -1,4 +1,6 @@
 import { randomBytes, randomInt } from "node:crypto";
+import { QR_PREFIX } from "./collection-input";
+export { QR_PREFIX };
 
 // No 0/O/1/I/L so codes survive being read aloud or handwritten.
 const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -13,5 +15,4 @@ export const normalizeClaimCode = (input: string) =>
   input.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // Opaque, non-guessable QR payload. No personal data. Revocation = status in qr_codes.
-export const QR_PREFIX = "SS1.";
 export const generateQrToken = () => QR_PREFIX + randomBytes(16).toString("base64url");

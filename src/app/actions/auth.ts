@@ -38,7 +38,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   }
 
   await createSession(user.id, user.role);
-  redirect(homeFor(user.role));
+  redirect(user.mustChangePassword ? "/change-password" : homeFor(user.role));
 }
 
 const registerSchema = z

@@ -21,7 +21,7 @@ type Props = {
 // The sidebar is sticky so it stays in view on long pages. Same routes and content markup everywhere.
 export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, offlineData, children }: Props) {
   return (
-    <div className="on-light min-h-dvh md:grid md:grid-cols-[5rem_1fr] lg:grid-cols-[16.5rem_1fr]">
+    <div className="app-shell on-light min-h-dvh md:grid md:grid-cols-[5rem_1fr] lg:grid-cols-[16.5rem_1fr]">
       <aside className="surface-forest no-print sticky top-0 hidden h-dvh flex-col px-3 py-5 md:flex lg:px-4">
         <Link href={homeHref} className="flex items-center justify-center gap-3 rounded-xl lg:justify-start lg:px-2">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-inset ring-white/15">
@@ -49,6 +49,14 @@ export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, offl
               <p className="truncate text-xs text-mint">{roleLabel}</p>
             </div>
           </div>
+          <Link
+            href="/change-password"
+            title="Change password"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-2 text-sm font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white lg:mt-2 lg:justify-start lg:px-3"
+          >
+            <Icon name="key" className="h-5 w-5" />
+            <span className="sr-only lg:not-sr-only">Change password</span>
+          </Link>
           <LogoutForm
             offlineData={offlineData}
             title="Log out"
@@ -66,7 +74,7 @@ export function AppShell({ roleLabel, userName, homeHref, profileHref, nav, offl
             <BrandMark className="h-8 w-8 text-lawn" />
             <Wordmark className="text-lg" />
           </Link>
-          <UserMenu userName={userName} roleLabel={roleLabel} profileHref={profileHref} offlineData={offlineData} />
+          <UserMenu userName={userName} roleLabel={roleLabel} profileHref={profileHref} offlineData={offlineData} moreLinks={nav.filter((i) => i.phone === false)} />
         </header>
 
         <main

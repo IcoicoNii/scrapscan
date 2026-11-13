@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { initials } from "@/lib/format";
 import { Icon } from "./icons";
 import { LogoutForm } from "./logout-form";
+import type { NavItem } from "./nav-links";
 
 // Mobile account menu. <details> works without JS; the effect only closes it after navigating,
 // because the shell (and so this menu) stays mounted between pages.
@@ -14,11 +15,13 @@ export function UserMenu({
   roleLabel,
   profileHref,
   offlineData,
+  moreLinks = [],
 }: {
   userName: string;
   roleLabel: string;
   profileHref?: string;
   offlineData?: boolean;
+  moreLinks?: NavItem[];
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
@@ -54,6 +57,16 @@ export function UserMenu({
             Profile
           </Link>
         )}
+        {moreLinks.map((l) => (
+          <Link key={l.href} href={l.href} className="flex min-h-11 items-center gap-3 rounded-xl px-3 font-semibold transition-colors hover:bg-mint">
+            <Icon name={l.icon} className="h-5 w-5 text-forest" />
+            {l.label}
+          </Link>
+        ))}
+        <Link href="/change-password" className="flex min-h-11 items-center gap-3 rounded-xl px-3 font-semibold transition-colors hover:bg-mint">
+          <Icon name="key" className="h-5 w-5 text-forest" />
+          Change password
+        </Link>
         <LogoutForm
           offlineData={offlineData}
           className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left font-semibold transition-colors hover:bg-mint"

@@ -4,14 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "./icons";
 
-export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean };
+/** phone: false keeps it out of the phone tab bar (it's in the account menu instead), so the bar never overflows. */
+export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; phone?: boolean };
 
 // "side" is an icon rail at md and a full sidebar at lg; "bottom" is the phone tab bar.
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: "bottom" | "side" }) {
   const pathname = usePathname();
   return (
     <ul className={variant === "bottom" ? "flex justify-around" : "space-y-1"}>
-      {items.map((item) => {
+      {items.filter((item) => variant === "side" || item.phone !== false).map((item) => {
         const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <li key={item.href} className={variant === "bottom" ? "flex-1" : undefined}>

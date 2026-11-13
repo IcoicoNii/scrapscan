@@ -13,7 +13,7 @@ export default async function AdminOverview() {
   await requirePagePermission("analytics:read");
 
   // Real numbers straight from the database. Zero is a valid value, not a placeholder.
-  const [households, claimed, collectors, collections, issued, flagged] = await Promise.all([
+  const [households, claimed, collectors, collections, issued, flagged, rewardRequests] = await Promise.all([
     db.household.count({ where: { status: "ACTIVE" } }),
     db.household.count({ where: { status: "ACTIVE", claimedAt: { not: null } } }),
     db.user.count({ where: { role: "COLLECTOR", status: "ACTIVE" } }),
@@ -21,6 +21,7 @@ export default async function AdminOverview() {
     // Awards on verified collections only: a flagged collection's points are on hold.
     db.pointsLedger.aggregate({ where: { type: "AWARD", collection: { status: "VERIFIED" } }, _sum: { points: true } }),
     countFlagged(),
+    db.redemption.count({ where: { status: "REQUESTED" } }),
   ]);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 
@@ -51,6 +52,18 @@ export default async function AdminOverview() {
                 {flagged} flagged {flagged === 1 ? "collection needs" : "collections need"} review
               </span>
               <span className="block text-sm text-slate-green">Their points are on hold until you decide.</span>
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
+
+      {rewardRequests > 0 && (
+        <Link href="/admin/rewards" className="card card-link flex items-center justify-between gap-3">
+          <span className="flex items-center gap-3">
+            <span className="icon-tile h-10 w-10"><Icon name="gift" className="h-5 w-5" /></span>
+            <span className="font-bold">
+              {rewardRequests} reward {rewardRequests === 1 ? "request is" : "requests are"} waiting for approval
             </span>
           </span>
           <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
@@ -88,6 +101,20 @@ export default async function AdminOverview() {
                 <Icon name="chevron-right" className="h-5 w-5" />
               </Link>
             </li>
+            {(
+              [
+                ["/admin/households/print", "printer", "Print QR stickers"],
+                ["/admin/collections", "list", "See today’s collections"],
+                ["/admin/accounts/new", "users", "Add a collector"],
+              ] as const
+            ).map(([href, icon, label]) => (
+              <li key={href}>
+                <Link href={href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 font-semibold transition-colors hover:border-line hover:bg-mint/60">
+                  <span className="flex items-center gap-3"><Icon name={icon} className="h-5 w-5 text-forest" />{label}</span>
+                  <Icon name="chevron-right" className="h-5 w-5" />
+                </Link>
+              </li>
+            ))}
             <li>
               <Link href="/admin/households" className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 font-semibold transition-colors hover:border-line hover:bg-mint/60">
                 <span className="flex items-center gap-3"><Icon name="houses" className="h-5 w-5 text-forest" />View households and codes</span>

@@ -67,9 +67,21 @@ npm test        # unit tests always; the auth/RBAC integration tests run when DA
   of the hold returns the points) or **doesn't count** it (`REJECTED`; the hold stays). Stored bins never change, a
   collection can only be decided once (two admins at once: one wins), and the decision + reason go in the audit log.
   Residents see "on hold" while it's flagged and "not counted" if rejected, never the admin's reason.
+- **Household admin:** `/admin/households/[code]` edits details, turns a household off/on, replaces its QR code (old
+  sticker refused at once), and stops counting a wrongly recorded collection (`REJECTED` + reversal of its award; bins
+  never change). `/admin/households/print` prints QR stickers 3 across, optionally with names and cut-off sign-up slips.
+- **Accounts:** `/admin/accounts` adds collectors/admins with a one-time temporary password (they must choose their own
+  at `/change-password`), resets passwords and turns accounts off/on. Every session carries the account's
+  `sessionVersion`; a reset, password change or deactivation bumps it, which signs out all older sessions at once.
+  Residents still sign up themselves with a household code.
+- **Rewards:** residents request rewards on `/citizen/rewards`; points are held at once (`REDEMPTION_HOLD`, household row
+  locked so two taps can't overspend) and a stock unit is reserved. Admin (`/admin/rewards`) approves → marks picked up
+  (points stay spent), or rejects with a note (hold reversed, stock returned). Residents can cancel before approval. Max 3
+  open requests per household. The catalogue is managed on the same page.
+- **Collections and audit:** `/admin/collections` shows one Manila day (filter by collector/status); `/admin/audit` lists
+  every audited change with who, when and why.
 - **Neon:** `DATABASE_URL` = pooled string, `DIRECT_URL` = direct string.
 
 ## Not built yet (shown as unavailable in the UI, never as dead buttons)
 
-Reward requests, collector management,
-analytics charts, password reset by email, QR sticker print sheet, Filipino/English toggle.
+Analytics charts, password reset by email (admins reset passwords for now), Filipino/English toggle.

@@ -38,10 +38,16 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
             : `${rows.length}${rows.length === 200 ? "+" : ""} registered`
         }
         actions={
+          <>
+          <Link href="/admin/households/print" className="btn btn-outline btn-sm">
+            <Icon name="printer" className="h-5 w-5" />
+            Print QR stickers
+          </Link>
           <Link href="/admin/households/new" className="btn btn-primary btn-sm">
             <Icon name="plus" className="h-5 w-5" />
             Add household
           </Link>
+          </>
         }
       />
 
@@ -79,12 +85,17 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
           {/* Phones: cards. md+: a table. */}
           <ul className="space-y-3 md:hidden">
             {rows.map((h) => (
-              <li key={h.id} className="card space-y-2">
+              <li key={h.id} className="card card-link relative space-y-2">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="font-extrabold text-forest">{h.code}</p>
+                  <Link href={`/admin/households/${h.code}`} className="font-extrabold text-forest after:absolute after:inset-0 after:rounded-[inherit]">
+                    {h.code}
+                  </Link>
                   <QrStatus active={h.qrCodes.length > 0} />
                 </div>
-                <p className="font-semibold">{h.name}</p>
+                <p className="font-semibold">
+                  {h.name}
+                  {h.status !== "ACTIVE" && <span className="ml-2 text-sm font-bold text-danger">Turned off</span>}
+                </p>
                 <p className="text-sm text-slate-green">{h.purok}</p>
                 <p className="text-sm">
                   <SignUp claimedAt={h.claimedAt} claimCode={h.claimCode} />
@@ -108,8 +119,13 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
               <tbody>
                 {rows.map((h) => (
                   <tr key={h.id}>
-                    <th scope="row" className="whitespace-nowrap px-4 py-3 font-bold">{h.code}</th>
-                    <td className="px-4 py-3">{h.name}</td>
+                    <th scope="row" className="whitespace-nowrap px-4 py-3 font-bold">
+                      <Link href={`/admin/households/${h.code}`} className="text-forest underline-offset-4 hover:underline">{h.code}</Link>
+                    </th>
+                    <td className="px-4 py-3">
+                      {h.name}
+                      {h.status !== "ACTIVE" && <span className="ml-2 text-xs font-bold text-danger">Turned off</span>}
+                    </td>
                     <td className="px-4 py-3">{h.purok}</td>
                     <td className="px-4 py-3"><QrStatus active={h.qrCodes.length > 0} /></td>
                     <td className="px-4 py-3"><SignUp claimedAt={h.claimedAt} claimCode={h.claimCode} /></td>

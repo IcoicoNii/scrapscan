@@ -1,12 +1,14 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { db } from "./db";
 import { SESSION_TTL_SECONDS, signToken, verifyToken, type SessionClaims } from "./jwt";
 import type { Role } from "./rbac";
 
 export const SESSION_COOKIE = "ss_session";
 
 export async function createSession(userId: string, role: Role) {
-  const token = await signToken({ sub: userId, role });
+  const { sessionVersion } = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { sessionVersion: true } });
+  const token = await signToken({ sub: userId, role, sv: sessionVersion });
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",

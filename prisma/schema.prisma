@@ -52,6 +52,7 @@ enum RedemptionStatus {
   APPROVED
   CLAIMED
   REJECTED
+  CANCELLED // withdrawn by the resident before a decision
 }
 
 // ---------- Accounts ----------
@@ -65,6 +66,11 @@ model User {
   role         Role
   status       AccountStatus @default(ACTIVE)
   createdAt    DateTime      @default(now())
+
+  // Set when an admin gives out a temporary password: the next page load asks for a new one.
+  mustChangePassword Boolean   @default(false)
+  // Stamped into every session. Bumped by a password reset/change or deactivation, which refuses all older sessions.
+  sessionVersion     Int       @default(0)
 
   // Only set for CITIZEN users (the household they claimed)
   householdId String?

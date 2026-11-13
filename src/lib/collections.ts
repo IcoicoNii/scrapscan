@@ -154,8 +154,38 @@ async function holdAward(tx: Tx, collectionId: string) {
   });
 }
 
+/**
+ * What the conflicting resend said, kept in the flag's audit row so the admin can compare it with the
+ * stored collection. The household is recorded by its code, never by the raw QR token.
+ */
+export type ReceivedResend = {
+  householdCode: string | null; // null: the QR or code it sent doesn't match any household
+  via: "qr" | "code";
+  collectedAt: string;
+  bins: CollectionInput["bins"];
+};
+
+async function describeResend(input: CollectionInput): Promise<ReceivedResend> {
+  const ref = input.household;
+  const householdCode = "qrToken" in ref
+    ? (await db.qrCode.findUnique({ where: { token: ref.qrToken }, select: { household: { select: { code: true } } } }))
+        ?.household.code ?? null
+    : normalizeHouseholdCode(ref.code);
+  return {
+    householdCode,
+    via: "qrToken" in ref ? "qr" : "code",
+    collectedAt: new Date(input.collectedAt).toISOString(),
+    bins: input.bins,
+  };
+}
+
 /** What to say when the id already exists. */
-async function answerExisting(existing: WithHousehold, collectorId: string, hash: string): Promise<RecordResult> {
+async function answerExisting(
+  existing: WithHousehold,
+  collectorId: string,
+  hash: string,
+  input: CollectionInput,
+): Promise<RecordResult> {
   // Don't reveal anything about another collector's record.
   if (existing.collectorId !== collectorId) {
     return fail("ID_CONFLICT", "This collection ID is already in use. Record the collection again.");
@@ -166,6 +196,7 @@ async function answerExisting(existing: WithHousehold, collectorId: string, hash
 
   // Same id, different details: someone or something changed a submitted collection. Keep the
   // original, mark it for review (once) and hold its points until an admin decides.
+  const received = await describeResend(input);
   const flagged = await db.$transaction(async (tx) => {
     const { count } = await tx.collection.updateMany({
       where: { id: existing.id, status: "VERIFIED" },
@@ -180,7 +211,7 @@ async function answerExisting(existing: WithHousehold, collectorId: string, hash
           targetType: "Collection",
           targetId: existing.id,
           reason: "Resubmitted with a different payload",
-          meta: { storedHash: existing.payloadHash, receivedHash: hash },
+          meta: { storedHash: existing.payloadHash, receivedHash: hash, received },
         },
       });
     }
@@ -203,7 +234,7 @@ export async function recordCollection(collectorId: string, raw: unknown, now = 
   // revoked or the time window has passed: the device just needs to learn it already went through.
   const findExisting = () => db.collection.findUnique({ where: { id: input.id }, include: householdSelect });
   const existing = await findExisting();
-  if (existing) return answerExisting(existing, collectorId, hash);
+  if (existing) return answerExisting(existing, collectorId, hash, input);
 
   const collectedAt = new Date(input.collectedAt);
   const age = now.getTime() - collectedAt.getTime();
@@ -246,7 +277,7 @@ export async function recordCollection(collectorId: string, raw: unknown, now = 
     // Lost a race. Either the same id landed first (a concurrent retry), or this household was
     // already collected that day.
     const raced = await findExisting();
-    if (raced) return answerExisting(raced, collectorId, hash);
+    if (raced) return answerExisting(raced, collectorId, hash, input);
     const sameDay = await db.collection.findUnique({
       where: { householdId_collectionDay: { householdId: household.id, collectionDay } },
       include: householdSelect,

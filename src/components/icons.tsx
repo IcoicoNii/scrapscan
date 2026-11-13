@@ -19,6 +19,7 @@ const paths = {
   trash: "M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 9Zm4 2v8h1.5v-8H10Zm2.5 0v8H14v-8h-1.5Z",
   menu: "M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z",
   "chevron-down": "M6 9.4 7.4 8l4.6 4.6L16.6 8 18 9.4l-6 6-6-6Z",
+  flag: "M5 3h2v18H5V3Zm3 1h11l-2.5 4.5L19 13H8V4Z",
 } as const;
 
 export type IconName = keyof typeof paths;

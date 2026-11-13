@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatPoints } from "@/lib/format";
+import { countFlagged } from "@/lib/reviews";
 import { Icon } from "@/components/icons";
 import { EmptyState, PageHeader, ProgressBar, SectionCard, StatCard } from "@/components/ui";
 
@@ -12,13 +13,14 @@ export default async function AdminOverview() {
   await requirePagePermission("analytics:read");
 
   // Real numbers straight from the database. Zero is a valid value, not a placeholder.
-  const [households, claimed, collectors, collections, issued] = await Promise.all([
+  const [households, claimed, collectors, collections, issued, flagged] = await Promise.all([
     db.household.count({ where: { status: "ACTIVE" } }),
     db.household.count({ where: { status: "ACTIVE", claimedAt: { not: null } } }),
     db.user.count({ where: { role: "COLLECTOR", status: "ACTIVE" } }),
     db.collection.count({ where: { status: "VERIFIED" } }),
     // Awards on verified collections only: a flagged collection's points are on hold.
     db.pointsLedger.aggregate({ where: { type: "AWARD", collection: { status: "VERIFIED" } }, _sum: { points: true } }),
+    countFlagged(),
   ]);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 
@@ -34,6 +36,26 @@ export default async function AdminOverview() {
           </Link>
         }
       />
+
+      {flagged > 0 && (
+        <Link
+          href="/admin/reviews"
+          className="card card-link flex items-center justify-between gap-3 border-danger/20 bg-danger-soft/60"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-danger-soft text-danger">
+              <Icon name="flag" className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block font-bold">
+                {flagged} flagged {flagged === 1 ? "collection needs" : "collections need"} review
+              </span>
+              <span className="block text-sm text-slate-green">Their points are on hold until you decide.</span>
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
 
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <li><StatCard label="Registered households" value={formatPoints(households)} note={`${claimed} signed up in the app`} icon="houses" /></li>

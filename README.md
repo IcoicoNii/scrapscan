@@ -61,9 +61,15 @@ npm test        # unit tests always; the auth/RBAC integration tests run when DA
     deleted on logout. Bump `VERSION` in `sw.js` to drop old caches.
   - Limits of a web app: nothing sends while the browser is closed (open ScrapScan when back in signal); iPhone Safari may
     clear site data after ~7 days unused unless it's added to the Home Screen; camera and offline loading need HTTPS.
+- **Flagged-collection review:** `/admin/reviews` (`src/lib/reviews.ts`, permission `collection:review`). Each card
+  compares the saved collection with what the conflicting resend said (recorded in the flag's audit row by household
+  code, never the raw QR token). The admin gives a reason and either **releases** it (back to `VERIFIED`; a `REVERSAL`
+  of the hold returns the points) or **doesn't count** it (`REJECTED`; the hold stays). Stored bins never change, a
+  collection can only be decided once (two admins at once: one wins), and the decision + reason go in the audit log.
+  Residents see "on hold" while it's flagged and "not counted" if rejected, never the admin's reason.
 - **Neon:** `DATABASE_URL` = pooled string, `DIRECT_URL` = direct string.
 
 ## Not built yet (shown as unavailable in the UI, never as dead buttons)
 
-Admin review of flagged collections, reward requests, collector management,
+Reward requests, collector management,
 analytics charts, password reset by email, QR sticker print sheet, Filipino/English toggle.

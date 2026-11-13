@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatDateTime, formatPoints } from "@/lib/format";
 import { BinChips, BinResultLabel } from "@/components/bin-chips";
+import { CollectionPoints, CollectionStatusNote, collectionStatusLabel } from "@/components/collection-status";
 import { EmptyState, PageHeader, StatCard } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Collection history" };
@@ -16,7 +17,7 @@ export default async function HistoryPage() {
         take: 50,
       })
     : [];
-  // Flagged collections are under review and their points are held in the ledger, so they're left out here too.
+  // Flagged (held) and rejected (not counted) collections don't count in the ledger, so they're left out here too.
   const earned = rows.reduce((sum, c) => (c.status === "VERIFIED" ? sum + c.score : sum), 0);
 
   return (
@@ -41,18 +42,10 @@ export default async function HistoryPage() {
               <li key={c.id} className="card space-y-3">
                 <p className="flex items-baseline justify-between gap-3">
                   <span className="text-sm font-semibold">{formatDateTime(c.collectedAt)}</span>
-                  {c.status === "FLAGGED" ? (
-                    <span className="text-sm font-semibold tabular-nums text-slate-green">{c.score} pts on hold</span>
-                  ) : (
-                    <span className="text-lg font-extrabold tabular-nums text-forest">+{c.score} pts</span>
-                  )}
+                  <CollectionPoints status={c.status} score={c.score} />
                 </p>
                 <BinChips bins={c} />
-                {c.status === "FLAGGED" && (
-                  <p className="text-sm font-semibold text-danger">
-                    Under review by your barangay admin. These points are on hold until it’s checked.
-                  </p>
-                )}
+                <CollectionStatusNote status={c.status} />
               </li>
             ))}
           </ul>
@@ -78,12 +71,18 @@ export default async function HistoryPage() {
                     <td className="px-4 py-3"><BinResultLabel result={c.recyclable} /></td>
                     <td className="px-4 py-3"><BinResultLabel result={c.residual} /></td>
                     <td className="px-4 py-3">
-                      {c.status === "FLAGGED" ? <span className="font-semibold text-danger">Under review</span> : "Verified"}
+                      {c.status === "VERIFIED" ? (
+                        collectionStatusLabel(c.status)
+                      ) : (
+                        <span className="font-semibold text-danger">{collectionStatusLabel(c.status)}</span>
+                      )}
                     </td>
-                    {c.status === "FLAGGED" ? (
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-green">{c.score} on hold</td>
-                    ) : (
+                    {c.status === "VERIFIED" ? (
                       <td className="px-4 py-3 text-right text-base font-extrabold tabular-nums text-forest">+{c.score}</td>
+                    ) : (
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-green">
+                        {c.status === "FLAGGED" ? `${c.score} on hold` : "0"}
+                      </td>
                     )}
                   </tr>
                 ))}

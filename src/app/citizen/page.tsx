@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatDate, formatPoints } from "@/lib/format";
 import { BinChips } from "@/components/bin-chips";
+import { CollectionPoints, CollectionStatusNote } from "@/components/collection-status";
 import { Icon, type IconName } from "@/components/icons";
 import { EmptyState, PageHeader, ProgressBar, SectionCard } from "@/components/ui";
 
@@ -106,18 +107,10 @@ export default async function CitizenHome() {
               <div className="space-y-3">
                 <p className="flex items-baseline justify-between gap-3">
                   <span className="text-sm text-slate-green">{formatDate(latest.collectedAt)}</span>
-                  {latest.status === "FLAGGED" ? (
-                    <span className="text-sm font-semibold tabular-nums text-slate-green">{latest.score} pts on hold</span>
-                  ) : (
-                    <span className="text-xl font-extrabold tabular-nums text-forest">+{latest.score} pts</span>
-                  )}
+                  <CollectionPoints status={latest.status} score={latest.score} size="lg" />
                 </p>
                 <BinChips bins={latest} />
-                {latest.status === "FLAGGED" && (
-                  <p className="text-sm font-semibold text-danger">
-                    Under review by your barangay admin. These points are on hold until it’s checked.
-                  </p>
-                )}
+                <CollectionStatusNote status={latest.status} />
               </div>
             ) : (
               <p className="text-slate-green">

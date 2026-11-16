@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { manilaDay } from "@/lib/dates";
 import { Icon } from "@/components/icons";
 import { DetailList, Notice, PageHeader, SectionCard } from "@/components/ui";
-import { AccountStatusForm, ResetPasswordForm } from "../account-forms";
+import { AccountStatusForm, LinkHouseholdForm, ResetPasswordForm } from "../account-forms";
 import { ROLE_LABEL } from "../roles";
 
 export const metadata: Metadata = { title: "Account" };
@@ -56,6 +56,11 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
           <Notice>This is your account. Use Change password in the menu to change your own password.</Notice>
         ) : (
           <div className="space-y-6">
+            {u.role === "CITIZEN" && (
+              <SectionCard id="household" title="Household">
+                <LinkHouseholdForm userId={u.id} current={u.household?.code ?? null} />
+              </SectionCard>
+            )}
             <SectionCard id="password" title="Password">
               <ResetPasswordForm userId={u.id} name={u.name} />
             </SectionCard>

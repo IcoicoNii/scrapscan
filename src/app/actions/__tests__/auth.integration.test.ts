@@ -47,11 +47,13 @@ run("auth + RBAC against the real database", async () => {
   const unclaimed = async (n: number) =>
     db.household.findMany({ where: { claimedAt: null, status: "ACTIVE" }, orderBy: { code: "desc" }, take: n });
   const signup = (code: string, email: string, extra: Record<string, string> = {}) =>
-    registerAction(undefined, form({ name: "Test Resident", identifier: email, householdCode: code, password: "longenough1", confirm: "longenough1", terms: "on", ...extra }));
+    registerAction(undefined, form({ mode: "join", name: "Test Resident", identifier: email, householdCode: code, password: "longenough1", confirm: "longenough1", terms: "on", ...extra }));
 
   beforeEach(() => jar.clear());
 
   afterAll(async () => {
+    // Joining a household is audited with the new account as the actor.
+    await db.auditLog.deleteMany({ where: { actor: { OR: [{ email: { in: createdEmails } }, { id: { in: phoneUsers } }] } } });
     await db.user.deleteMany({ where: { OR: [{ email: { in: createdEmails } }, { id: { in: phoneUsers } }] } });
     await db.household.updateMany({ where: { id: { in: claimedIds } }, data: { claimedAt: null } });
     await db.auditLog.deleteMany({ where: { targetId: { in: createdHouseholdIds } } });
@@ -73,26 +75,16 @@ run("auth + RBAC against the real database", async () => {
     expect(user.passwordHash).not.toContain("longenough1");
   });
 
-  it("rejects a household code that was already used", async () => {
+  it("lets family members join the same household with its sign-up code", async () => {
     const [h] = await unclaimed(1);
     claimedIds.push(h.id);
     const a = `a-${tag}@test.local`, b = `b-${tag}@test.local`;
     createdEmails.push(a, b);
-    await redirectOf(signup(h.claimCode, a));
-    const res = await signup(h.claimCode, b);
-    expect(res?.fieldErrors?.householdCode).toMatch(/already used|isn’t valid/);
-    expect(await db.user.findUnique({ where: { email: b } })).toBeNull();
-  });
-
-  it("lets exactly one of two simultaneous signups claim the same household", async () => {
-    const [h] = await unclaimed(1);
-    claimedIds.push(h.id);
-    const a = `r1-${tag}@test.local`, b = `r2-${tag}@test.local`;
-    createdEmails.push(a, b);
-    const results = await Promise.all([redirectOf(signup(h.claimCode, a)), (async () => { try { return await signup(h.claimCode, b); } catch (e) { return (e as { redirectTo?: string }).redirectTo; } })()]);
-    const succeeded = results.filter((r) => r === "/citizen").length;
-    expect(succeeded).toBe(1);
-    expect(await db.user.count({ where: { householdId: h.id } })).toBe(1);
+    expect(await redirectOf(signup(h.claimCode, a))).toBe("/citizen");
+    jar.clear();
+    expect(await redirectOf(signup(h.claimCode, b))).toBe("/citizen");
+    expect(await db.user.count({ where: { householdId: h.id } })).toBe(2);
+    expect(await signup("ZZZZ-ZZZZ", `c-${tag}@test.local`)).toMatchObject({ fieldErrors: { householdCode: expect.stringMatching(/isn’t valid/) } });
   });
 
   it("validates passwords, terms and identifiers", async () => {

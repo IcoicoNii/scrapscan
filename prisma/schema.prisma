@@ -25,6 +25,12 @@ enum AccountStatus {
   INACTIVE
 }
 
+enum HouseholdStatus {
+  PENDING  // registered by a resident, waiting for admin approval: has a QR code but can't be collected yet
+  ACTIVE
+  INACTIVE // turned off, or a registration that wasn't approved (see statusNote)
+}
+
 enum QrStatus {
   ACTIVE
   REVOKED
@@ -84,18 +90,21 @@ model User {
   @@index([householdId])
 }
 
-// Admin creates households (source of truth). A resident signs up by
-// entering the claimCode printed on their QR sheet.
+// Created by an admin (ACTIVE) or by a resident registering themselves (PENDING until an admin approves).
+// claimCode is the household's sign-up code: family members enter it to join (up to 5 accounts).
 model Household {
   id        String        @id @default(uuid())
   code      String        @unique // human-readable, e.g. HH-00421 (manual entry fallback)
   name      String
   address   String
   purok     String
-  status    AccountStatus @default(ACTIVE)
-  claimCode String        @unique
-  claimedAt DateTime?
-  createdAt DateTime      @default(now())
+  status    HouseholdStatus @default(ACTIVE)
+  claimCode String          @unique // sign-up code; reusable by family members, can be replaced
+  claimedAt DateTime?       // when the first account joined
+  createdAt DateTime        @default(now())
+
+  selfRegistered Boolean @default(false) // registered by a resident rather than an admin
+  statusNote     String? // shown to residents, e.g. why the registration wasn't approved
 
   members     User[]
   qrCodes     QrCode[]

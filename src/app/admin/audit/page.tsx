@@ -12,6 +12,12 @@ const PAGE = 50;
 // Plain-language names for audit actions. Unknown actions fall back to their raw name.
 const ACTIONS: Record<string, string> = {
   "household.create": "Added household",
+  "household.register": "Resident registered a household",
+  "household.join": "Resident joined a household",
+  "household.approve": "Approved household registration",
+  "household.reject": "Didn’t approve household registration",
+  "household.code_reset": "Made a new sign-up code",
+  "account.household_link": "Changed a resident’s household",
   "household.update": "Edited household details",
   "household.deactivate": "Turned off household",
   "household.activate": "Turned on household",

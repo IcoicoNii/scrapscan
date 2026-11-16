@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requirePermission } from "@/lib/auth";
 import { changeOwnPassword, createStaffAccount, resetPassword, setAccountStatus } from "@/lib/accounts";
+import { linkResident } from "@/lib/households";
 import { createSession } from "@/lib/session";
 import { homeFor } from "@/lib/rbac";
 import { failed, typedValues, type ActionState } from "@/lib/form-state";
@@ -41,3 +42,16 @@ export async function changePasswordAction(_prev: ActionState, fd: FormData): Pr
   redirect(homeFor(user.role));
 }
 
+
+/** Move a resident to another household by household number, or unlink them (empty number + unlink). */
+export async function linkResidentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const admin = await requirePermission("user:manage");
+  const unlink = fd.get("unlink") === "1";
+  const number = String(fd.get("household") ?? "").trim();
+  if (!unlink && !number) return { fieldErrors: { household: "Enter a household number, e.g. HH-00012." } };
+  const r = await linkResident(admin.id, String(fd.get("userId") ?? ""), unlink ? null : number);
+  if (!r.ok) return failed(r, typedValues(fd, ["household"]));
+  revalidatePath("/admin/accounts", "layout");
+  revalidatePath("/admin/households", "layout");
+  return { done: unlink ? "Removed from the household." : `Linked to ${number.toUpperCase()}.` };
+}

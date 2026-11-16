@@ -4,6 +4,7 @@ import { requirePagePermission } from "@/lib/auth";
 import { qrSvg } from "@/lib/qr";
 import { Icon } from "@/components/icons";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { HouseholdStatusNotice } from "@/components/household-status";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "My QR code" };
@@ -21,7 +22,7 @@ export default async function MyQrPage() {
   }
 
   const [household, qr] = await Promise.all([
-    db.household.findUnique({ where: { id: user.householdId }, select: { code: true, name: true } }),
+    db.household.findUnique({ where: { id: user.householdId }, select: { code: true, name: true, status: true, statusNote: true } }),
     db.qrCode.findFirst({
       where: { householdId: user.householdId, status: "ACTIVE" },
       orderBy: { createdAt: "desc" },
@@ -46,6 +47,9 @@ export default async function MyQrPage() {
   return (
     <div className="space-y-6">
       <PageHeader className="no-print" title="My QR code" description="Your collector scans this to record your household’s collection." />
+      <div className="no-print">
+        <HouseholdStatusNotice status={household.status} statusNote={household.statusNote} />
+      </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,24rem)_1fr] lg:items-start">
         <section aria-label="Household QR code" className="card mx-auto w-full max-w-sm text-center lg:max-w-none lg:p-8">
           <div

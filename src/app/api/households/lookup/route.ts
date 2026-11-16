@@ -9,6 +9,7 @@ const STATUS: Record<Extract<HouseholdLookup, { ok: false }>["error"], number> =
   HOUSEHOLD_NOT_FOUND: 404,
   QR_REVOKED: 422,
   HOUSEHOLD_INACTIVE: 422,
+  HOUSEHOLD_PENDING: 422,
 };
 
 export async function POST(request: Request) {

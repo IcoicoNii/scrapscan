@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { createAccountAction, resetPasswordAction, setAccountStatusAction } from "@/app/actions/accounts";
+import { createAccountAction, linkResidentAction, resetPasswordAction, setAccountStatusAction } from "@/app/actions/accounts";
 import { TextField } from "@/components/fields";
 import { FormMessages, TextAreaField, fieldError } from "@/components/form-bits";
 import type { ActionState } from "@/lib/form-state";
@@ -91,6 +91,38 @@ export function AccountStatusForm({ userId, active }: { userId: string; active: 
       <button type="submit" disabled={pending} className={`btn btn-sm ${active ? "btn-outline" : "btn-primary"}`}>
         {active ? "Turn off account" : "Turn on account"}
       </button>
+      <FormMessages state={state} pending={pending} />
+    </form>
+  );
+}
+
+/** Move a resident to the right household (e.g. a duplicate registration), or take them out of one. */
+export function LinkHouseholdForm({ userId, current }: { userId: string; current: string | null }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(linkResidentAction, undefined);
+  return (
+    <form action={action} noValidate className="space-y-3">
+      <input type="hidden" name="userId" value={userId} />
+      <p className="text-sm text-slate-green">
+        {current ? `Linked to ${current}. ` : "Not linked to a household. "}
+        Use this when someone registered a duplicate household, or signed up without their family’s code.
+      </p>
+      <TextField
+        label="Move to household number"
+        name="household"
+        placeholder="e.g. HH-00012 or 12"
+        defaultValue={state?.values?.household}
+        error={fieldError(state, "household")}
+      />
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={pending} className="btn btn-primary btn-sm">
+          Link to this household
+        </button>
+        {current && (
+          <button type="submit" name="unlink" value="1" disabled={pending} className="btn btn-outline btn-sm">
+            Remove from {current}
+          </button>
+        )}
+      </div>
       <FormMessages state={state} pending={pending} />
     </form>
   );

@@ -35,7 +35,13 @@ npm test        # unit tests always; the auth/RBAC integration tests run when DA
   from the signed-in account, never from the URL or form.
 - **Auth:** email or PH mobile + password, signed session cookie (`jose`), DB re-checked on every request so
   deactivated accounts lose access immediately. Collector sessions last 30 days so queued scans can sync.
-- **Households:** admins create them (with a QR token and a one-time claim code). Residents sign up with that code.
+- **Households and sign-up:** residents register their own household at `/register` ("Register my household": name,
+  address, purok). It gets its HH number and QR code at once but is `PENDING`: every collector path requires `ACTIVE`, so
+  it can't be recorded until an admin approves it (`/admin/households?status=PENDING`, with possible duplicates shown;
+  declining turns it off with a note the resident sees). Admins can also create households directly (active at once).
+  Each household's sign-up code (`claimCode`) lets family members join ("I have a sign-up code"), up to 5 accounts;
+  residents and admins can replace a leaked code, and admins can move a resident to another household. Logic in
+  `src/lib/households.ts`.
 - **Scoring:** `src/lib/scoring.ts`, server-side only. 0 contaminated bins = 10, 1 = 5, 2-3 = 0 (**proposed, confirm with the barangay**).
 - **Ledger:** append-only (DB trigger, migration `*_db_constraints`). Corrections are `REVERSAL` rows with a reason.
 - **Collections:** `POST /api/collections` (`src/lib/collections.ts`), collectors only. The device sends a UUID it

@@ -2,7 +2,9 @@
 
 import { useActionState } from "react";
 import {
+  decideRegistrationAction,
   excludeCollectionAction,
+  regenerateCodeAction,
   replaceQrAction,
   setHouseholdStatusAction,
   updateHouseholdAction,
@@ -131,5 +133,74 @@ export function ExcludeCollectionForm({ collectionId, score, counts }: { collect
       action={excludeCollectionAction}
       placeholder="e.g. Collector scanned the neighbour's sticker"
     />
+  );
+}
+
+/**
+ * The approval panel for a resident-registered household: approve it, or decline it with a note the resident sees.
+ * Rendered for every self-registered household so the confirmation stays on screen after the decision.
+ */
+export function RegistrationDecisionForm({
+  householdId,
+  pending: waiting,
+  children,
+}: {
+  householdId: string;
+  /** Still waiting for a decision. */
+  pending: boolean;
+  /** Who registered it and possible duplicates. */
+  children: React.ReactNode;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(decideRegistrationAction, undefined);
+  if (state?.done && !pending) return <FormMessages state={state} />;
+  if (!waiting) return null;
+  return (
+    <section aria-labelledby="approval" className="card space-y-4 border-moss/30 bg-cream/40">
+      {children}
+      <form action={action} noValidate className="space-y-3">
+        <input type="hidden" name="householdId" value={householdId} />
+        <button type="submit" name="decision" value="approve" disabled={pending} className="btn btn-primary w-full sm:w-auto">
+          Approve household
+        </button>
+        <details className="rounded-2xl border border-line">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center px-4 text-sm font-semibold text-forest [&::-webkit-details-marker]:hidden">
+            Don’t approve…
+          </summary>
+          <div className="space-y-3 border-t border-line-soft p-4">
+            <TextAreaField
+              label="Note to the resident"
+              name="note"
+              defaultValue={state?.values?.note}
+              error={fieldError(state, "note")}
+              hint="They’ll see this on their home page. The household is turned off; you can turn it on later."
+              placeholder="e.g. Already registered as HH-00012. Ask your family for the sign-up code."
+            />
+            <button type="submit" name="decision" value="reject" disabled={pending} className="btn btn-outline btn-sm">
+              Don’t approve
+            </button>
+          </div>
+        </details>
+        <FormMessages state={state} pending={pending} />
+      </form>
+    </section>
+  );
+}
+
+export function RegenerateCodeForm({ householdId }: { householdId: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(regenerateCodeAction, undefined);
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!window.confirm("Make a new sign-up code? The old code stops working. People already in the household keep their access.")) e.preventDefault();
+      }}
+      className="space-y-2"
+    >
+      <input type="hidden" name="householdId" value={householdId} />
+      <button type="submit" disabled={pending} className="btn btn-ghost btn-sm">
+        Get a new sign-up code
+      </button>
+      <FormMessages state={state} pending={pending} />
+    </form>
   );
 }

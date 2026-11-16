@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { HouseholdStatus } from "@prisma/client";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
@@ -8,12 +9,23 @@ import { EmptyState, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Households" };
 
-export default async function HouseholdsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+const TABS = [
+  ["ACTIVE", "Active"],
+  ["PENDING", "Waiting for approval"],
+  ["INACTIVE", "Turned off"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+export default async function HouseholdsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
   await requirePagePermission("household:read:all");
-  const { q } = await searchParams;
+  const { q, status: rawStatus } = await searchParams;
   const term = q?.trim();
+  const status: Tab = TABS.find(([s]) => s === rawStatus)?.[0] ?? "ACTIVE";
+  const counts = await db.household.groupBy({ by: ["status"], _count: true });
+  const countOf = (s: Tab) => counts.find((c) => c.status === s)?._count ?? 0;
 
   const rows = await db.household.findMany({
+    // A search looks across every status; otherwise show the chosen tab.
     where: term
       ? {
           OR: [
@@ -22,7 +34,7 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
             { purok: { contains: term, mode: "insensitive" } },
           ],
         }
-      : undefined,
+      : { status },
     orderBy: { code: "asc" },
     take: 200,
     include: { qrCodes: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 } },
@@ -50,6 +62,21 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
           </>
         }
       />
+
+      {!term && (
+        <nav aria-label="Household status" className="flex gap-2 overflow-x-auto">
+          {TABS.map(([s, label]) => (
+            <Link
+              key={s}
+              href={`/admin/households?status=${s}`}
+              aria-current={s === status ? "page" : undefined}
+              className={`btn btn-sm shrink-0 ${s === status ? "btn-primary" : "btn-secondary"}`}
+            >
+              {label} ({countOf(s)})
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <form role="search" className="flex flex-wrap gap-2">
         <div className="relative min-w-0 flex-1 basis-56">
@@ -94,7 +121,7 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
                 </div>
                 <p className="font-semibold">
                   {h.name}
-                  {h.status !== "ACTIVE" && <span className="ml-2 text-sm font-bold text-danger">Turned off</span>}
+                  <StatusBadge status={h.status} />
                 </p>
                 <p className="text-sm text-slate-green">{h.purok}</p>
                 <p className="text-sm">
@@ -124,7 +151,7 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
                     </th>
                     <td className="px-4 py-3">
                       {h.name}
-                      {h.status !== "ACTIVE" && <span className="ml-2 text-xs font-bold text-danger">Turned off</span>}
+                      <StatusBadge status={h.status} />
                     </td>
                     <td className="px-4 py-3">{h.purok}</td>
                     <td className="px-4 py-3"><QrStatus active={h.qrCodes.length > 0} /></td>
@@ -150,6 +177,17 @@ function QrStatus({ active }: { active: boolean }) {
       <Icon name={active ? "check" : "warn"} className="h-3.5 w-3.5" />
       {active ? "QR active" : "QR revoked"}
     </span>
+  );
+}
+
+function StatusBadge({ status }: { status: HouseholdStatus }) {
+  if (status === "ACTIVE") return null;
+  return status === "PENDING" ? (
+    <span className="ml-2 whitespace-nowrap rounded-full bg-cream px-2 py-0.5 text-xs font-bold text-khaki ring-1 ring-inset ring-moss/25">
+      Waiting for approval
+    </span>
+  ) : (
+    <span className="ml-2 whitespace-nowrap text-xs font-bold text-danger">Turned off</span>
   );
 }
 

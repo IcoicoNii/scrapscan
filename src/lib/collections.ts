@@ -39,6 +39,7 @@ export type RecordErrorCode =
   | "HOUSEHOLD_NOT_FOUND"
   | "QR_REVOKED"
   | "HOUSEHOLD_INACTIVE"
+  | "HOUSEHOLD_PENDING" // registered by a resident, not approved by the admin yet
   | "ALREADY_COLLECTED" // this household already has a collection for that Manila day
   | "ID_CONFLICT"; // this id was already used with different details (or by someone else)
 
@@ -86,7 +87,10 @@ export type HouseholdLookup =
       /** Already has a collection today (Manila), so recording another would be refused. */
       collectedToday: CollectionSummary | null;
     }
-  | { ok: false; error: "INVALID" | "HOUSEHOLD_NOT_FOUND" | "QR_REVOKED" | "HOUSEHOLD_INACTIVE"; message: string };
+  | { ok: false; error: "INVALID" | "HOUSEHOLD_NOT_FOUND" | "QR_REVOKED" | "HOUSEHOLD_INACTIVE" | "HOUSEHOLD_PENDING"; message: string };
+
+const PENDING_MESSAGE = "This household is waiting for barangay approval. Don’t record it yet; ask them to check with the barangay office.";
+const INACTIVE_MESSAGE = "This household is inactive. Check with the barangay admin.";
 
 /** For the scan screen: confirm who this is before the collector checks the bins. */
 export async function lookupHousehold(raw: unknown, now = new Date()): Promise<HouseholdLookup> {
@@ -94,9 +98,8 @@ export async function lookupHousehold(raw: unknown, now = new Date()): Promise<H
   if (!parsed.success) return { ok: false, error: "INVALID", message: "Scan a QR code or type a household number." };
   const household = await resolveHousehold(parsed.data);
   if ("ok" in household) return household;
-  if (household.status !== "ACTIVE") {
-    return { ok: false, error: "HOUSEHOLD_INACTIVE", message: "This household is inactive. Check with the barangay admin." };
-  }
+  if (household.status === "PENDING") return { ok: false, error: "HOUSEHOLD_PENDING", message: PENDING_MESSAGE };
+  if (household.status !== "ACTIVE") return { ok: false, error: "HOUSEHOLD_INACTIVE", message: INACTIVE_MESSAGE };
   const today = await db.collection.findUnique({
     where: { householdId_collectionDay: { householdId: household.id, collectionDay: manilaDay(now) } },
     include: householdSelect,
@@ -243,7 +246,8 @@ export async function recordCollection(collectorId: string, raw: unknown, now = 
 
   const household = await resolveHousehold(input.household);
   if ("ok" in household) return household;
-  if (household.status !== "ACTIVE") return fail("HOUSEHOLD_INACTIVE", "This household is inactive. Check with the barangay admin.");
+  if (household.status === "PENDING") return fail("HOUSEHOLD_PENDING", PENDING_MESSAGE);
+  if (household.status !== "ACTIVE") return fail("HOUSEHOLD_INACTIVE", INACTIVE_MESSAGE);
 
   const collectionDay = manilaDay(collectedAt);
   const score = scoreCollection(input.bins);

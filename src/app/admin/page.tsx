@@ -13,7 +13,7 @@ export default async function AdminOverview() {
   await requirePagePermission("analytics:read");
 
   // Real numbers straight from the database. Zero is a valid value, not a placeholder.
-  const [households, claimed, collectors, collections, issued, flagged, rewardRequests] = await Promise.all([
+  const [households, claimed, collectors, collections, issued, flagged, rewardRequests, pendingHouseholds] = await Promise.all([
     db.household.count({ where: { status: "ACTIVE" } }),
     db.household.count({ where: { status: "ACTIVE", claimedAt: { not: null } } }),
     db.user.count({ where: { role: "COLLECTOR", status: "ACTIVE" } }),
@@ -22,6 +22,7 @@ export default async function AdminOverview() {
     db.pointsLedger.aggregate({ where: { type: "AWARD", collection: { status: "VERIFIED" } }, _sum: { points: true } }),
     countFlagged(),
     db.redemption.count({ where: { status: "REQUESTED" } }),
+    db.household.count({ where: { status: "PENDING" } }),
   ]);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 
@@ -52,6 +53,21 @@ export default async function AdminOverview() {
                 {flagged} flagged {flagged === 1 ? "collection needs" : "collections need"} review
               </span>
               <span className="block text-sm text-slate-green">Their points are on hold until you decide.</span>
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
+
+      {pendingHouseholds > 0 && (
+        <Link href="/admin/households?status=PENDING" className="card card-link flex items-center justify-between gap-3">
+          <span className="flex items-center gap-3">
+            <span className="icon-tile h-10 w-10"><Icon name="houses" className="h-5 w-5" /></span>
+            <span>
+              <span className="block font-bold">
+                {pendingHouseholds} new household {pendingHouseholds === 1 ? "registration is" : "registrations are"} waiting for approval
+              </span>
+              <span className="block text-sm text-slate-green">Collectors can’t record them until you approve.</span>
             </span>
           </span>
           <Icon name="chevron-right" className="h-5 w-5 shrink-0" />

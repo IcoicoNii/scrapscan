@@ -46,15 +46,57 @@ export async function setHouseholdStatus(adminId: string, raw: unknown): Promise
   if (!parsed.success) return invalid(parsed.error);
   const { householdId, status, reason } = parsed.data;
   return db.$transaction(async (tx) => {
-    const { count } = await tx.household.updateMany({ where: { id: householdId, status: { not: status } }, data: { status } });
+    // PENDING households are decided with decideRegistration, never switched on directly.
+    const from = status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    const { count } = await tx.household.updateMany({ where: { id: householdId, status: from }, data: { status, statusNote: null } });
     if (count === 0) {
-      const exists = await tx.household.count({ where: { id: householdId } });
-      return exists ? ({ ok: true } as const) : ({ ok: false, message: "That household doesn’t exist." } as const);
+      const h = await tx.household.findUnique({ where: { id: householdId }, select: { status: true } });
+      if (!h) return { ok: false, message: "That household doesn’t exist." } as const;
+      if (h.status === "PENDING") return { ok: false, message: "This household is waiting for approval. Approve or decline the registration instead." } as const;
+      return { ok: true } as const;
     }
     await tx.auditLog.create({
       data: {
         actorId: adminId, action: status === "ACTIVE" ? "household.activate" : "household.deactivate",
         targetType: "Household", targetId: householdId, reason,
+      },
+    });
+    return { ok: true } as const;
+  });
+}
+
+const registrationSchema = z
+  .object({
+    householdId: z.uuid(),
+    decision: z.enum(["approve", "reject"], { error: "Choose approve or don’t approve." }),
+    note: z.string().trim().max(300).optional().transform((v) => v || undefined),
+  })
+  .refine((d) => d.decision === "approve" || (d.note && d.note.length >= 3), {
+    path: ["note"],
+    message: "Tell the resident why (they’ll see this note).",
+  });
+
+/**
+ * A resident-registered household: approve it (collectors can record it from now on) or don't
+ * (it's turned off and the resident sees the note). Only PENDING households can be decided, once.
+ */
+export async function decideRegistration(adminId: string, raw: unknown): Promise<AdminResult & { code?: string }> {
+  const parsed = registrationSchema.safeParse(raw);
+  if (!parsed.success) return invalid(parsed.error);
+  const { householdId, decision, note } = parsed.data;
+  return db.$transaction(async (tx) => {
+    const { count } = await tx.household.updateMany({
+      where: { id: householdId, status: "PENDING" },
+      data: decision === "approve" ? { status: "ACTIVE", statusNote: null } : { status: "INACTIVE", statusNote: note },
+    });
+    if (count === 0) {
+      const exists = await tx.household.count({ where: { id: householdId } });
+      return { ok: false, message: exists ? "This registration was already decided. The page has been refreshed." : "That household doesn’t exist." } as const;
+    }
+    await tx.auditLog.create({
+      data: {
+        actorId: adminId, action: decision === "approve" ? "household.approve" : "household.reject",
+        targetType: "Household", targetId: householdId, reason: note ?? null,
       },
     });
     return { ok: true } as const;

@@ -115,9 +115,9 @@ export default async function PrintStickersPage({ searchParams }: { searchParams
               {showSlips && !h.claimedAt && (
                 <div className="mt-3 border-t-2 border-dashed border-line pt-2 text-left text-[0.7rem] leading-snug">
                   <p className="font-bold">✂ Sign-up slip for {h.code}</p>
-                  <p>To see your points, create an account in ScrapScan and enter this code:</p>
+                  <p>To see your points, sign up in ScrapScan, choose “I have a sign-up code” and enter:</p>
                   <p className="mt-0.5 text-base font-extrabold tracking-widest text-forest">{formatClaimCode(h.claimCode)}</p>
-                  <p className="text-slate-green">Keep it private. It works once.</p>
+                  <p className="text-slate-green">Family members can use it too. Keep it private.</p>
                 </div>
               )}
             </li>

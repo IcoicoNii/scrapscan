@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatDate, formatPoints } from "@/lib/format";
 import { BinChips } from "@/components/bin-chips";
+import { HouseholdStatusNotice } from "@/components/household-status";
 import { CollectionPoints, CollectionStatusNote } from "@/components/collection-status";
 import { Icon, type IconName } from "@/components/icons";
 import { EmptyState, PageHeader, ProgressBar, SectionCard } from "@/components/ui";
@@ -34,7 +35,7 @@ export default async function CitizenHome() {
     db.pointsLedger.aggregate({ where: { householdId }, _sum: { points: true } }),
     db.collection.count({ where: { householdId, status: "VERIFIED" } }),
     db.collection.findFirst({ where: { householdId }, orderBy: { collectedAt: "desc" } }),
-    db.household.findUnique({ where: { id: householdId }, select: { code: true, name: true } }),
+    db.household.findUnique({ where: { id: householdId }, select: { code: true, name: true, status: true, statusNote: true } }),
   ]);
   const balance = points._sum.points ?? 0;
   const nextReward = await db.reward.findFirst({
@@ -51,6 +52,7 @@ export default async function CitizenHome() {
         title={firstName}
         description={household ? `${household.name} · ${household.code}` : undefined}
       />
+      {household && <HouseholdStatusNotice status={household.status} statusNote={household.statusNote} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">

@@ -7,12 +7,20 @@ import { formatClaimCode } from "@/lib/codes";
 import { formatDate, formatDateTime, formatPoints } from "@/lib/format";
 import { normalizeHouseholdCode } from "@/lib/collection-input";
 import { householdBalance } from "@/lib/admin-households";
+import { MAX_MEMBERS, possibleDuplicates } from "@/lib/households";
 import { qrSvg } from "@/lib/qr";
 import { BinResultLabel } from "@/components/bin-chips";
 import { collectionStatusLabel } from "@/components/collection-status";
 import { Icon } from "@/components/icons";
-import { DetailList, Notice, PageHeader, SectionCard, StatCard } from "@/components/ui";
-import { EditDetailsForm, ExcludeCollectionForm, ReplaceQrForm, StatusForm } from "./household-forms";
+import { Notice, PageHeader, SectionCard, StatCard } from "@/components/ui";
+import {
+  EditDetailsForm,
+  ExcludeCollectionForm,
+  RegenerateCodeForm,
+  RegistrationDecisionForm,
+  ReplaceQrForm,
+  StatusForm,
+} from "./household-forms";
 
 type Params = { params: Promise<{ code: string }> };
 
@@ -26,7 +34,7 @@ export default async function HouseholdPage({ params }: Params) {
   const h = await db.household.findUnique({
     where: { code },
     include: {
-      members: { select: { id: true, name: true, email: true, phone: true, status: true } },
+      members: { select: { id: true, name: true, email: true, phone: true, status: true, createdAt: true }, orderBy: { createdAt: "asc" } },
       qrCodes: { orderBy: { createdAt: "desc" } },
       collections: { orderBy: { collectedAt: "desc" }, take: 20, include: { collector: { select: { name: true } } } },
     },
@@ -37,6 +45,8 @@ export default async function HouseholdPage({ params }: Params) {
   const svg = activeQr ? await qrSvg(activeQr.token) : null;
   const revokedCount = h.qrCodes.length - (activeQr ? 1 : 0);
   const active = h.status === "ACTIVE";
+  const pending = h.status === "PENDING";
+  const duplicates = pending ? await possibleDuplicates(h) : [];
 
   return (
     <div className="space-y-6">
@@ -57,7 +67,34 @@ export default async function HouseholdPage({ params }: Params) {
           )
         }
       />
-      {!active && (
+      {h.selfRegistered && (
+        <RegistrationDecisionForm householdId={h.id} pending={pending}>
+          <div>
+            <h2 id="approval" className="text-lg font-bold">Waiting for your approval</h2>
+            <p className="mt-1 text-sm text-slate-green">
+              Registered by {h.members[0]?.name ?? "a resident"} on {formatDateTime(h.createdAt)}. Collectors can’t record it until you
+              approve. Check the address is in the barangay and the household isn’t already registered.
+            </p>
+          </div>
+          {duplicates.length > 0 ? (
+            <div className="rounded-2xl border border-danger/20 bg-danger-soft/60 p-3 text-sm">
+              <p className="font-semibold text-danger">Possibly already registered:</p>
+              <ul className="mt-1 space-y-1">
+                {duplicates.map((d) => (
+                  <li key={d.code}>
+                    <Link href={`/admin/households/${d.code}`} className="font-semibold text-forest underline">{d.code}</Link> · {d.name} · {d.address}
+                    {d.status !== "ACTIVE" && ` (${d.status === "PENDING" ? "also waiting" : "turned off"})`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-green">No other household in {h.purok} has the same name or address.</p>
+          )}
+        </RegistrationDecisionForm>
+      )}
+      {h.status === "INACTIVE" && h.statusNote && <Notice tone="warn">Not approved: “{h.statusNote}”</Notice>}
+      {h.status === "INACTIVE" && !h.statusNote && (
         <Notice tone="warn">This household is turned off. Collectors can’t record it and its sign-up code doesn’t work.</Notice>
       )}
 
@@ -94,29 +131,39 @@ export default async function HouseholdPage({ params }: Params) {
             </div>
           </SectionCard>
 
-          <SectionCard id="signup" title="App sign-up">
+          <SectionCard id="signup" title={`App accounts (${h.members.length} of ${MAX_MEMBERS})`}>
             {h.members.length > 0 ? (
-              <DetailList
-                items={h.members.map((m) => ({
-                  label: m.status === "ACTIVE" ? "Resident" : "Resident (off)",
-                  value: (
-                    <Link href={`/admin/accounts?q=${encodeURIComponent(m.email ?? m.phone ?? m.name)}`} className="font-semibold text-forest hover:underline">
-                      {m.name} · {m.email ?? m.phone}
-                    </Link>
-                  ),
-                }))}
-              />
+              <ul className="space-y-1">
+                {h.members.map((m) => (
+                  <li key={m.id}>
+                    <Link href={`/admin/accounts/${m.id}`} className="font-semibold text-forest hover:underline">
+                      {m.name}
+                    </Link>{" "}
+                    <span className="text-sm text-slate-green">
+                      {m.email ?? m.phone}
+                      {m.status !== "ACTIVE" && " · turned off"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <p>
-                Not signed up yet. Sign-up code:{" "}
-                <span className="whitespace-nowrap text-lg font-extrabold tracking-widest text-forest">{formatClaimCode(h.claimCode)}</span>
-              </p>
+              <p className="text-slate-green">No one has signed up yet.</p>
             )}
+            <p className="mt-4">
+              Sign-up code:{" "}
+              <span className="whitespace-nowrap text-lg font-extrabold tracking-widest text-forest">{formatClaimCode(h.claimCode)}</span>
+            </p>
+            <p className="text-sm text-slate-green">Family members enter it when they sign up to join this household.</p>
+            <div className="mt-2">
+              <RegenerateCodeForm householdId={h.id} />
+            </div>
           </SectionCard>
 
-          <SectionCard id="status" title="Status">
-            <StatusForm householdId={h.id} active={active} />
-          </SectionCard>
+          {!pending && (
+            <SectionCard id="status" title="Status">
+              <StatusForm householdId={h.id} active={active} />
+            </SectionCard>
+          )}
         </div>
       </div>
 

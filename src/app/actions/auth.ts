@@ -7,9 +7,12 @@ import { db } from "@/lib/db";
 import { createSession, destroySession } from "@/lib/session";
 import { homeFor } from "@/lib/rbac";
 import { parseLoginId } from "@/lib/identifiers";
-import { normalizeClaimCode } from "@/lib/codes";
+import { registerResident } from "@/lib/households";
 
-export type FormState = { error?: string; fieldErrors?: Record<string, string> } | undefined;
+/** values: what was typed (never passwords), put back after React resets the form on an error. */
+export type FormState = { error?: string; fieldErrors?: Record<string, string>; values?: Record<string, string> } | undefined;
+
+const KEEP_ON_ERROR = ["name", "identifier", "householdName", "address", "purok", "householdCode"];
 
 // Compared against when the account doesn't exist, so response time doesn't reveal who has an account.
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
@@ -41,79 +44,17 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   redirect(user.mustChangePassword ? "/change-password" : homeFor(user.role));
 }
 
-const registerSchema = z
-  .object({
-    name: z.string().trim().min(2, "Enter your full name.").max(80),
-    identifier: z.string().trim().min(1, "Enter your email or mobile number."),
-    householdCode: z.string().trim().min(1, "Enter the household code from your barangay."),
-    password: z.string().min(8, "Use at least 8 characters."),
-    confirm: z.string(),
-    terms: z.literal("on", { error: "Agree to the Terms & Privacy to continue." }),
-  })
-  .refine((d) => d.password === d.confirm, {
-    path: ["confirm"],
-    message: "Passwords don't match.",
-  });
-
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const parsed = registerSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "form");
-      fieldErrors[key] ??= issue.message;
+  const result = await registerResident(Object.fromEntries(formData));
+  if (!result.ok) {
+    const values: Record<string, string> = {};
+    for (const k of KEEP_ON_ERROR) {
+      const val = formData.get(k);
+      if (typeof val === "string") values[k] = val.slice(0, 200);
     }
-    return { fieldErrors };
+    return { fieldErrors: result.fieldErrors, values };
   }
-  const { name, identifier, householdCode, password } = parsed.data;
-
-  const id = parseLoginId(identifier);
-  if (!id) {
-    return { fieldErrors: { identifier: "Enter a valid email or a Philippine mobile number (09XX XXX XXXX)." } };
-  }
-
-  const claim = normalizeClaimCode(householdCode);
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  let userId: string;
-  try {
-    userId = await db.$transaction(async (tx) => {
-      const household = await tx.household.findUnique({ where: { claimCode: claim } });
-      if (!household || household.status !== "ACTIVE") throw new Error("BAD_CODE");
-
-      // Atomic claim: only one signup can flip claimedAt from null.
-      const claimed = await tx.household.updateMany({
-        where: { id: household.id, claimedAt: null },
-        data: { claimedAt: new Date() },
-      });
-      if (claimed.count !== 1) throw new Error("BAD_CODE");
-
-      const user = await tx.user.create({
-        data: {
-          name,
-          role: "CITIZEN",
-          passwordHash,
-          householdId: household.id,
-          ...(id.kind === "email" ? { email: id.value } : { phone: id.value }),
-        },
-      });
-      return user.id;
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message === "BAD_CODE") {
-      return {
-        fieldErrors: {
-          householdCode: "This code isn't valid or was already used. Check it with your barangay admin.",
-        },
-      };
-    }
-    if (typeof e === "object" && e && "code" in e && e.code === "P2002") {
-      return { fieldErrors: { identifier: "An account with this email or number already exists." } };
-    }
-    throw e;
-  }
-
-  await createSession(userId, "CITIZEN");
+  await createSession(result.userId, "CITIZEN");
   redirect("/citizen");
 }
 

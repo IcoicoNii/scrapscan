@@ -13,7 +13,11 @@ export default function PrivacyPage() {
           <h2>What we collect</h2>
           <ul>
             <li>Your name, and the email address or mobile number you sign up with.</li>
-            <li>Your household’s name, address and purok, as registered by the barangay.</li>
+            <li>
+              Your household’s name, address and purok, entered by you when you register your household (or by the barangay
+              office). The barangay office checks them before your collections count.
+            </li>
+            <li>Which accounts belong to your household (up to five family members can join with its sign-up code).</li>
             <li>For each collection: the date and time, which collector recorded it, and whether each bin was sorted correctly.</li>
             <li>Your points and any rewards you request.</li>
           </ul>
@@ -35,7 +39,8 @@ export default function PrivacyPage() {
         <section>
           <h2>Who can see it</h2>
           <p>
-            You see your own household’s information. Collectors see only what they need to record a collection. Barangay
+            You and the family members in your household see your household’s information and points. Collectors see only what
+            they need to record a collection. Barangay
             admins can see household records to run the program. We don’t sell your information.
           </p>
         </section>

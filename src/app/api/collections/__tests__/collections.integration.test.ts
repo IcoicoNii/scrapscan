@@ -15,6 +15,7 @@ vi.mock("next/headers", () => ({
     set: (k: string, v: string) => void jar.set(k, v),
     delete: (k: string) => void jar.delete(k),
   }),
+  headers: async () => new Headers(),
 }));
 
 const run = process.env.DATABASE_URL ? describe : describe.skip;

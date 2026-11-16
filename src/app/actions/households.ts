@@ -7,6 +7,7 @@ import { formatClaimCode } from "@/lib/codes";
 import { createHousehold, householdFieldsSchema, regenerateSignUpCode, withNumberRetry } from "@/lib/households";
 import { decideRegistration, excludeCollection, replaceQrCode, setHouseholdStatus, updateHouseholdDetails } from "@/lib/admin-households";
 import { failed, typedValues, type ActionState } from "@/lib/form-state";
+import { getI18n } from "@/lib/i18n/server";
 
 export type CreateHouseholdState =
   | { error?: string; fieldErrors?: Record<string, string>; created?: { code: string; name: string; claimCode: string } }
@@ -115,5 +116,5 @@ export async function regenerateOwnCodeAction(): Promise<ActionState> {
   const r = await regenerateSignUpCode(user.id, user.householdId);
   if (!r.ok) return { error: r.message };
   revalidatePath("/citizen", "layout");
-  return { done: "New code made. The old one no longer works; family members already in keep their access." };
+  return { done: (await getI18n()).t.citizen.newCodeDone };
 }

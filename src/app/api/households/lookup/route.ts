@@ -1,5 +1,6 @@
 import { authorizeJson, jsonResponse } from "@/lib/api";
 import { lookupHousehold, type HouseholdLookup } from "@/lib/collections";
+import { getI18n } from "@/lib/i18n/server";
 
 // POST /api/households/lookup  { qrToken } | { code }
 // Lets a collector confirm which household they're at before checking the bins.
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   const auth = await authorizeJson(request, "household:lookup");
   if (auth instanceof Response) return auth;
 
-  const result = await lookupHousehold(auth.body);
+  const { t } = await getI18n(); // messages in the collector's language
+  const result = await lookupHousehold(auth.body, new Date(), t.errors.collection);
   return jsonResponse(result, result.ok ? 200 : STATUS[result.error]);
 }

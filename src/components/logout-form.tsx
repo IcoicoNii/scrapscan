@@ -2,6 +2,8 @@
 
 import { useRef } from "react";
 import { logoutAction } from "@/app/actions/auth";
+import { plural } from "@/lib/i18n/config";
+import { useI18n } from "./i18n";
 
 // Log out button. With `offlineData` (collector pages), it first warns about unsent scans and then
 // clears what must not outlive the session on this phone (household list, saved pages). Unsent scans
@@ -12,6 +14,7 @@ export function LogoutForm({
   ...button
 }: { offlineData?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const confirmed = useRef(false);
+  const { t } = useI18n();
 
   return (
     <form
@@ -26,10 +29,7 @@ export function LogoutForm({
           const unsent = pending + attention;
           if (
             unsent > 0 &&
-            !window.confirm(
-              `${unsent} ${unsent === 1 ? "scan hasn’t" : "scans haven’t"} been sent yet. ` +
-                "They stay saved on this phone and will send the next time you sign in. Log out anyway?",
-            )
+            !window.confirm(plural(unsent, t.collector.logoutUnsentOne, t.collector.logoutUnsentOther))
           ) {
             return;
           }

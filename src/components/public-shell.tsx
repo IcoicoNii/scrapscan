@@ -1,22 +1,28 @@
+"use client";
+
 import Link from "next/link";
 import { BrandMark, Wordmark } from "./brand";
+import { useI18n } from "./i18n";
+import { LanguageSwitch } from "./language-switch";
 
 // Header and footer for pages anyone can open (landing, terms, privacy).
 export function PublicShell({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="glass-forest sticky top-0 z-20 pt-[env(safe-area-inset-top)] text-white shadow-[0_8px_24px_-16px_rgb(27_67_0/0.8)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
           <Link href="/" className="flex min-h-11 items-center gap-2">
             <BrandMark className="h-8 w-8 text-lawn" />
-            <Wordmark className="text-lg sm:text-xl" />
+            <Wordmark className="hidden text-lg min-[400px]:inline sm:text-xl" />
           </Link>
-          <nav aria-label="Account" className="flex items-center gap-2">
-            <Link href="/login" className="btn btn-sm px-4 text-white shadow-none hover:bg-white/10">
-              Log in
+          <nav aria-label="Account" className="flex items-center gap-1.5 sm:gap-2">
+            <LanguageSwitch tone="dark" />
+            <Link href="/login" className="btn btn-sm px-3 text-white shadow-none hover:bg-white/10 sm:px-4">
+              {t.common.logIn}
             </Link>
-            <Link href="/register" className="btn btn-lawn btn-sm">
-              Sign up
+            <Link href="/register" className="btn btn-lawn btn-sm px-3 sm:px-4">
+              {t.common.signUp}
             </Link>
           </nav>
         </div>
@@ -28,16 +34,19 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
 
       <footer className="on-light border-t border-line bg-white/70 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-6 text-sm text-slate-green sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p className="flex items-center gap-2"><BrandMark className="h-5 w-5 text-forest" />ScrapScan · Barangay waste segregation pilot</p>
+          <p className="flex items-center gap-2">
+            <BrandMark className="h-5 w-5 text-forest" />
+            ScrapScan · {t.common.pilot}
+          </p>
           <ul className="flex gap-1">
             <li>
               <Link href="/terms" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">
-                Terms
+                {t.common.terms}
               </Link>
             </li>
             <li>
               <Link href="/privacy" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">
-                Privacy
+                {t.common.privacy}
               </Link>
             </li>
           </ul>

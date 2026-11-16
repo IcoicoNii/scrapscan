@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
         ],
       },
+      // The reset token is in this page's URL: never send it to another site in a Referer header.
+      { source: "/reset-password", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
     ];
   },
   turbopack: {

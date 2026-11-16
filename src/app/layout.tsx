@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/montserrat";
 import "./globals.css";
+import { I18nProvider } from "@/components/i18n";
+import { DICTIONARIES } from "@/lib/i18n/dictionaries";
+import { HTML_LANG } from "@/lib/i18n/config";
+import { getLocale } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: { default: "ScrapScan", template: "%s · ScrapScan" },
@@ -16,17 +20,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The reader's language (saved choice or browser preference). Admin pages switch back to English themselves.
+  const locale = await getLocale();
   return (
-    <html lang="en">
+    <html lang={HTML_LANG[locale]}>
       <body>
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-forest"
         >
-          Skip to content
+          {DICTIONARIES[locale].common.skipToContent}
         </a>
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
   );

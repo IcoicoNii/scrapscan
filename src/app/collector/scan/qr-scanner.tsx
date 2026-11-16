@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
+import { useI18n } from "@/components/i18n";
+import type { Dictionary } from "@/lib/i18n/en";
 
 // Camera QR scanner. Uses the browser's BarcodeDetector where it exists (Android Chrome) and falls
 // back to jsQR (loaded only when needed), so iPhones work too. Mount it to scan; it calls onScan once
@@ -15,12 +17,12 @@ type DetectorCtor = {
 
 type Status = "starting" | "scanning" | "denied" | "no-camera" | "insecure" | "unsupported" | "error";
 
-const MESSAGES: Record<Exclude<Status, "starting" | "scanning">, string> = {
-  denied: "Camera access was blocked. Allow the camera for this site in your browser settings, or type the household number below.",
-  "no-camera": "No camera was found on this device. Type the household number below.",
-  insecure: "The camera only works over a secure (https) connection. Type the household number below.",
-  unsupported: "This browser can’t use the camera for scanning. Type the household number below.",
-  error: "The camera couldn’t start. Close other apps using it and try again, or type the household number below.",
+const MESSAGE_KEY: Record<Exclude<Status, "starting" | "scanning">, keyof Dictionary["collector"]> = {
+  denied: "camDenied",
+  "no-camera": "camNone",
+  insecure: "camInsecure",
+  unsupported: "camUnsupported",
+  error: "camError",
 };
 
 const SCAN_INTERVAL_MS = 150;
@@ -49,6 +51,7 @@ async function makeDecoder(): Promise<(video: HTMLVideoElement) => Promise<strin
 export function QrScanner({ onScan }: { onScan: (text: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<Status>("starting");
+  const { t } = useI18n();
   const onScanRef = useRef(onScan);
   useEffect(() => {
     onScanRef.current = onScan;
@@ -112,7 +115,7 @@ export function QrScanner({ onScan }: { onScan: (text: string) => void }) {
           ref={videoRef}
           playsInline
           muted
-          aria-label="Camera view for scanning the household QR code"
+          aria-label={t.collector.cameraView}
           className={`h-full w-full object-cover ${failed ? "hidden" : ""}`}
         />
         {/* Aiming frame */}
@@ -120,19 +123,19 @@ export function QrScanner({ onScan }: { onScan: (text: string) => void }) {
           <div aria-hidden="true" className="pointer-events-none absolute inset-[14%] rounded-[1.25rem] border-4 border-lawn/90 shadow-[0_0_0_100vmax_rgb(0_0_0/0.35)]" />
         )}
         {status === "starting" && (
-          <p className="absolute inset-0 grid place-items-center text-sm font-semibold text-white">Starting camera…</p>
+          <p className="absolute inset-0 grid place-items-center text-sm font-semibold text-white">{t.collector.startingCamera}</p>
         )}
         {failed && (
           <div className="absolute inset-0 grid place-items-center p-6 text-center text-white">
             <div>
               <Icon name="qr" className="mx-auto h-12 w-12 text-lawn" />
-              <p className="mt-3 text-sm font-medium">{MESSAGES[status]}</p>
+              <p className="mt-3 text-sm font-medium">{t.collector[MESSAGE_KEY[status]]}</p>
             </div>
           </div>
         )}
       </div>
       <p aria-live="polite" className="mt-3 text-center text-sm text-slate-green">
-        {status === "scanning" ? "Point the camera at the QR code on the container." : ""}
+        {status === "scanning" ? t.collector.pointCamera : ""}
       </p>
     </div>
   );

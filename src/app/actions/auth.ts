@@ -8,6 +8,7 @@ import { createSession, destroySession } from "@/lib/session";
 import { homeFor } from "@/lib/rbac";
 import { parseLoginId } from "@/lib/identifiers";
 import { registerResident } from "@/lib/households";
+import { getI18n } from "@/lib/i18n/server";
 
 /** values: what was typed (never passwords), put back after React resets the form on an error. */
 export type FormState = { error?: string; fieldErrors?: Record<string, string>; values?: Record<string, string> } | undefined;
@@ -17,15 +18,17 @@ const KEEP_ON_ERROR = ["name", "identifier", "householdName", "address", "purok"
 // Compared against when the account doesn't exist, so response time doesn't reveal who has an account.
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
-const loginSchema = z.object({
-  identifier: z.string().trim().min(1, "Enter your email or mobile number."),
-  password: z.string().min(1, "Enter your password."),
-});
+const loginSchema = (t: { errorMissingId: string; errorMissingPassword: string }) =>
+  z.object({
+    identifier: z.string().trim().min(1, t.errorMissingId),
+    password: z.string().min(1, t.errorMissingPassword),
+  });
 
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const parsed = loginSchema.safeParse(Object.fromEntries(formData));
+  const { t } = await getI18n();
+  const parsed = loginSchema(t.login).safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Check your details and try again." };
+    return { error: parsed.error.issues[0]?.message ?? t.login.errorWrong };
   }
   const id = parseLoginId(parsed.data.identifier);
   const user = id
@@ -35,9 +38,9 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     : null;
 
   const ok = await bcrypt.compare(parsed.data.password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !ok) return { error: "Wrong email, mobile number or password." };
+  if (!user || !ok) return { error: t.login.errorWrong };
   if (user.status !== "ACTIVE") {
-    return { error: "This account is turned off. Ask your barangay admin for help." };
+    return { error: t.login.errorOff };
   }
 
   await createSession(user.id, user.role);
@@ -45,7 +48,8 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 }
 
 export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const result = await registerResident(Object.fromEntries(formData));
+  const { t } = await getI18n();
+  const result = await registerResident(Object.fromEntries(formData), t.errors.register);
   if (!result.ok) {
     const values: Record<string, string> = {};
     for (const k of KEEP_ON_ERROR) {

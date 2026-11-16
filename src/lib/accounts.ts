@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "./db";
 import { parseLoginId } from "./identifiers";
+import { en } from "./i18n/en";
 
 // Account management for admins, plus changing your own password. Admins never see or choose
 // passwords: they hand out a one-time temporary password, and the next page load asks for a new one.
@@ -104,22 +105,30 @@ export async function setAccountStatus(adminId: string, raw: unknown): Promise<{
   });
 }
 
-export const changePasswordSchema = z
-  .object({
-    current: z.string().min(1, "Enter your current password."),
-    password: z.string().min(8, "Use at least 8 characters.").max(200),
-    confirm: z.string(),
-  })
-  .refine((d) => d.password === d.confirm, { path: ["confirm"], message: "Passwords don't match." })
-  .refine((d) => d.password !== d.current, { path: ["password"], message: "Choose a password that’s different from the current one." });
+/** Change-password messages in one language (the page passes the reader's). */
+export type PasswordMessages = Pick<
+  { [K in keyof typeof en.changePassword]: string },
+  "errorCurrent" | "errorMissingCurrent" | "errorTooShort" | "errorMismatch" | "errorSame"
+>;
+const EN_PASSWORD: PasswordMessages = en.changePassword;
+
+const changePasswordSchema = (m: PasswordMessages) =>
+  z
+    .object({
+      current: z.string().min(1, m.errorMissingCurrent),
+      password: z.string().min(8, m.errorTooShort).max(200),
+      confirm: z.string(),
+    })
+    .refine((d) => d.password === d.confirm, { path: ["confirm"], message: m.errorMismatch })
+    .refine((d) => d.password !== d.current, { path: ["password"], message: m.errorSame });
 
 /** Signs out the account's other sessions; the caller makes a fresh one for this device. */
-export async function changeOwnPassword(userId: string, raw: unknown): Promise<{ ok: true } | AccountError> {
-  const parsed = changePasswordSchema.safeParse(raw);
+export async function changeOwnPassword(userId: string, raw: unknown, m: PasswordMessages = EN_PASSWORD): Promise<{ ok: true } | AccountError> {
+  const parsed = changePasswordSchema(m).safeParse(raw);
   if (!parsed.success) return invalid(parsed.error);
   const user = await db.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
   if (!user || !(await bcrypt.compare(parsed.data.current, user.passwordHash))) {
-    return { ok: false, message: "Check the highlighted field.", fieldErrors: { current: "That’s not your current password." } };
+    return { ok: false, message: m.errorCurrent, fieldErrors: { current: m.errorCurrent } };
   }
   const passwordHash = await hash(parsed.data.password);
   await db.$transaction([

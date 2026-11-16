@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth";
+import { getI18n } from "@/lib/i18n/server";
 import { cancelRedemption, decideRedemption, requestReward, saveReward } from "@/lib/redemptions";
 import { failed, typedValues, type ActionState } from "@/lib/form-state";
 
@@ -35,16 +36,18 @@ export async function decideRedemptionAction(_prev: ActionState, fd: FormData): 
 
 export async function requestRewardAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const user = await requirePermission("redemption:create:own");
-  const r = await requestReward(user, fd.get("rewardId"));
+  const { t } = await getI18n();
+  const r = await requestReward(user, fd.get("rewardId"), t.errors.rewards);
   if (!r.ok) return { error: r.message };
   refresh();
-  return { done: "Requested. Your points are set aside until the barangay office decides." };
+  return { done: t.citizen.requested_done };
 }
 
 export async function cancelRedemptionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const user = await requirePermission("redemption:create:own");
-  const r = await cancelRedemption(user, fd.get("redemptionId"));
+  const { t } = await getI18n();
+  const r = await cancelRedemption(user, fd.get("redemptionId"), t.errors.rewards);
   if (!r.ok) return { error: r.message };
   refresh();
-  return { done: "Request cancelled. Your points are back." };
+  return { done: t.citizen.cancelled_done };
 }

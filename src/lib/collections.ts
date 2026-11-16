@@ -11,6 +11,12 @@ import {
   type CollectionInput,
   type HouseholdRef,
 } from "./collection-input";
+import { en } from "./i18n/en";
+import { format } from "./i18n/config";
+
+/** The collector-facing messages (one language). Callers pass the reader's; English by default. */
+export type CollectionMessages = { [K in keyof typeof en.errors.collection]: string };
+const EN: CollectionMessages = en.errors.collection;
 
 // Records one collection: the only place that creates Collection rows and AWARD ledger rows.
 //
@@ -89,17 +95,15 @@ export type HouseholdLookup =
     }
   | { ok: false; error: "INVALID" | "HOUSEHOLD_NOT_FOUND" | "QR_REVOKED" | "HOUSEHOLD_INACTIVE" | "HOUSEHOLD_PENDING"; message: string };
 
-const PENDING_MESSAGE = "This household is waiting for barangay approval. Don’t record it yet; ask them to check with the barangay office.";
-const INACTIVE_MESSAGE = "This household is inactive. Check with the barangay admin.";
 
 /** For the scan screen: confirm who this is before the collector checks the bins. */
-export async function lookupHousehold(raw: unknown, now = new Date()): Promise<HouseholdLookup> {
+export async function lookupHousehold(raw: unknown, now = new Date(), m: CollectionMessages = EN): Promise<HouseholdLookup> {
   const parsed = householdRefSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false, error: "INVALID", message: "Scan a QR code or type a household number." };
-  const household = await resolveHousehold(parsed.data);
+  if (!parsed.success) return { ok: false, error: "INVALID", message: m.lookupInvalid };
+  const household = await resolveHousehold(parsed.data, m);
   if ("ok" in household) return household;
-  if (household.status === "PENDING") return { ok: false, error: "HOUSEHOLD_PENDING", message: PENDING_MESSAGE };
-  if (household.status !== "ACTIVE") return { ok: false, error: "HOUSEHOLD_INACTIVE", message: INACTIVE_MESSAGE };
+  if (household.status === "PENDING") return { ok: false, error: "HOUSEHOLD_PENDING", message: m.pending };
+  if (household.status !== "ACTIVE") return { ok: false, error: "HOUSEHOLD_INACTIVE", message: m.inactive };
   const today = await db.collection.findUnique({
     where: { householdId_collectionDay: { householdId: household.id, collectionDay: manilaDay(now) } },
     include: householdSelect,
@@ -111,21 +115,21 @@ export async function lookupHousehold(raw: unknown, now = new Date()): Promise<H
 type ResolveFailure = { ok: false; error: "HOUSEHOLD_NOT_FOUND" | "QR_REVOKED"; message: string };
 const notFound = (message: string): ResolveFailure => ({ ok: false, error: "HOUSEHOLD_NOT_FOUND", message });
 
-async function resolveHousehold(ref: HouseholdRef): Promise<Household | ResolveFailure> {
+async function resolveHousehold(ref: HouseholdRef, m: CollectionMessages): Promise<Household | ResolveFailure> {
   if ("qrToken" in ref) {
     const qr = await db.qrCode.findUnique({ where: { token: ref.qrToken }, include: { household: true } });
-    if (!qr) return notFound("This QR code isn't registered to any household.");
+    if (!qr) return notFound(m.qrUnknown);
     if (qr.status !== "ACTIVE") {
       return {
         ok: false,
         error: "QR_REVOKED",
-        message: "This QR code was replaced. Ask the household for their new one, or type the household number.",
+        message: m.qrReplaced,
       };
     }
     return qr.household;
   }
   const household = await db.household.findUnique({ where: { code: normalizeHouseholdCode(ref.code) } });
-  return household ?? notFound("No household has that number. Check it and try again.");
+  return household ?? notFound(m.numberUnknown);
 }
 
 type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
@@ -188,10 +192,11 @@ async function answerExisting(
   collectorId: string,
   hash: string,
   input: CollectionInput,
+  m: CollectionMessages,
 ): Promise<RecordResult> {
   // Don't reveal anything about another collector's record.
   if (existing.collectorId !== collectorId) {
-    return fail("ID_CONFLICT", "This collection ID is already in use. Record the collection again.");
+    return fail("ID_CONFLICT", m.idInUse);
   }
   if (existing.payloadHash === hash) {
     return { ok: true, replay: true, collection: summarize(existing) };
@@ -222,14 +227,14 @@ async function answerExisting(
   });
   return fail(
     "ID_CONFLICT",
-    "This collection was already sent with different details. It's been flagged for the admin to review, and its points are on hold.",
+    m.flagged,
     summarize(flagged),
   );
 }
 
-export async function recordCollection(collectorId: string, raw: unknown, now = new Date()): Promise<RecordResult> {
+export async function recordCollection(collectorId: string, raw: unknown, now = new Date(), m: CollectionMessages = EN): Promise<RecordResult> {
   const parsed = collectionInputSchema.safeParse(raw);
-  if (!parsed.success) return fail("INVALID", "The collection details are incomplete or malformed.");
+  if (!parsed.success) return fail("INVALID", m.invalid);
   const input = parsed.data;
   const hash = payloadHash(input);
 
@@ -237,17 +242,17 @@ export async function recordCollection(collectorId: string, raw: unknown, now = 
   // revoked or the time window has passed: the device just needs to learn it already went through.
   const findExisting = () => db.collection.findUnique({ where: { id: input.id }, include: householdSelect });
   const existing = await findExisting();
-  if (existing) return answerExisting(existing, collectorId, hash, input);
+  if (existing) return answerExisting(existing, collectorId, hash, input, m);
 
   const collectedAt = new Date(input.collectedAt);
   const age = now.getTime() - collectedAt.getTime();
-  if (age < -MAX_FUTURE_MS) return fail("OUT_OF_RANGE", "The phone's clock looks wrong: this collection is dated in the future.");
-  if (age > MAX_AGE_MS) return fail("OUT_OF_RANGE", "This collection is more than 30 days old and can't be recorded.");
+  if (age < -MAX_FUTURE_MS) return fail("OUT_OF_RANGE", m.future);
+  if (age > MAX_AGE_MS) return fail("OUT_OF_RANGE", m.tooOld);
 
-  const household = await resolveHousehold(input.household);
+  const household = await resolveHousehold(input.household, m);
   if ("ok" in household) return household;
-  if (household.status === "PENDING") return fail("HOUSEHOLD_PENDING", PENDING_MESSAGE);
-  if (household.status !== "ACTIVE") return fail("HOUSEHOLD_INACTIVE", INACTIVE_MESSAGE);
+  if (household.status === "PENDING") return fail("HOUSEHOLD_PENDING", m.pending);
+  if (household.status !== "ACTIVE") return fail("HOUSEHOLD_INACTIVE", m.inactive);
 
   const collectionDay = manilaDay(collectedAt);
   const score = scoreCollection(input.bins);
@@ -281,14 +286,14 @@ export async function recordCollection(collectorId: string, raw: unknown, now = 
     // Lost a race. Either the same id landed first (a concurrent retry), or this household was
     // already collected that day.
     const raced = await findExisting();
-    if (raced) return answerExisting(raced, collectorId, hash, input);
+    if (raced) return answerExisting(raced, collectorId, hash, input, m);
     const sameDay = await db.collection.findUnique({
       where: { householdId_collectionDay: { householdId: household.id, collectionDay } },
       include: householdSelect,
     });
     return fail(
       "ALREADY_COLLECTED",
-      `${household.name} (${household.code}) was already collected on ${manilaDateString(collectedAt)}.`,
+      format(m.alreadyCollected, { name: household.name, code: household.code, date: manilaDateString(collectedAt) }),
       sameDay ? summarize(sameDay) : undefined,
     );
   }

@@ -1,13 +1,17 @@
+"use client";
+
 import { Icon } from "./icons";
+import { useI18n } from "./i18n";
 
 type Result = "CORRECT" | "CONTAMINATED";
 
 // Icon + words, never color alone.
 export function BinChips({ bins }: { bins: { biodegradable: Result; recyclable: Result; residual: Result } }) {
+  const { t } = useI18n();
   const rows: [string, Result][] = [
-    ["Biodegradable", bins.biodegradable],
-    ["Recyclable", bins.recyclable],
-    ["Residual", bins.residual],
+    [t.bins.biodegradable, bins.biodegradable],
+    [t.bins.recyclable, bins.recyclable],
+    [t.bins.residual, bins.residual],
   ];
   return (
     <ul className="flex flex-wrap gap-2">
@@ -19,7 +23,7 @@ export function BinChips({ bins }: { bins: { biodegradable: Result; recyclable: 
           }`}
         >
           <Icon name={r === "CORRECT" ? "check" : "warn"} className="h-4 w-4" />
-          {label}: {r === "CORRECT" ? "Correct" : "Contaminated"}
+          {label}: {r === "CORRECT" ? t.bins.correct : t.bins.contaminated}
         </li>
       ))}
     </ul>
@@ -28,11 +32,12 @@ export function BinChips({ bins }: { bins: { biodegradable: Result; recyclable: 
 
 /** Single result for table cells. Icon + word, same as the chips. */
 export function BinResultLabel({ result }: { result: Result }) {
+  const { t } = useI18n();
   const ok = result === "CORRECT";
   return (
     <span className={`inline-flex items-center gap-1.5 font-semibold ${ok ? "text-forest" : "text-danger"}`}>
       <Icon name={ok ? "check" : "warn"} className="h-4 w-4" />
-      {ok ? "Correct" : "Contaminated"}
+      {ok ? t.bins.correct : t.bins.contaminated}
     </span>
   );
 }

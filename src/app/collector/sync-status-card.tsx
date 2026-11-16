@@ -4,25 +4,29 @@ import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { syncAll } from "@/lib/offline/queue";
 import { useSyncStatus } from "./sync-agent";
+import { useI18n } from "@/components/i18n";
+import { plural } from "@/lib/i18n/config";
 
 /** Home page card: how many scans are saved on this phone and waiting, with Send now. */
 export function SyncStatusCard({ collectorId }: { collectorId: string }) {
   const s = useSyncStatus();
+  const { t } = useI18n();
+  const c = t.collector;
   const waiting = s.pending + s.attention;
 
   let note: string;
-  if (!s.ready) note = "Checking this phone…";
-  else if (!s.storage) note = "This browser can’t save scans offline. You need signal to save.";
-  else if (s.syncing) note = "Sending…";
-  else if (s.signedOut && s.pending) note = "Sign in again to send them.";
-  else if (s.attention) note = `${s.attention} ${s.attention === 1 ? "needs" : "need"} your attention.`;
-  else if (s.pending) note = "They’ll send automatically when there’s signal.";
-  else note = "Everything saved on this phone has been sent.";
+  if (!s.ready) note = c.checking;
+  else if (!s.storage) note = c.noStorage;
+  else if (s.syncing) note = t.common.sending;
+  else if (s.signedOut && s.pending) note = c.signInToSend;
+  else if (s.attention) note = plural(s.attention, c.attentionOne, c.attentionOther);
+  else if (s.pending) note = c.willSend;
+  else note = c.allSent;
 
   return (
     <div className="card">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-green">Waiting to sync</p>
+        <p className="text-sm font-semibold text-slate-green">{c.waitingToSync}</p>
         <span className="icon-tile h-10 w-10">
           <Icon name="clock" className="h-5 w-5" />
         </span>
@@ -38,11 +42,11 @@ export function SyncStatusCard({ collectorId }: { collectorId: string }) {
               onClick={() => syncAll(collectorId, { force: true })}
               className="btn btn-primary btn-sm"
             >
-              Send now
+              {t.common.sendNow}
             </button>
           )}
           <Link href="/collector/queue" className="btn btn-outline btn-sm">
-            See saved scans
+            {c.seeSaved}
           </Link>
         </div>
       )}

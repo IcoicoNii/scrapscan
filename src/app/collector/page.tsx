@@ -6,27 +6,26 @@ import { formatPoints } from "@/lib/format";
 import { Icon } from "@/components/icons";
 import { PageHeader, SectionCard, StatCard } from "@/components/ui";
 import { SyncStatusCard } from "./sync-status-card";
+import { getI18n } from "@/lib/i18n/server";
+import { format } from "@/lib/i18n/config";
 
 export const metadata: Metadata = { title: "Collector home" };
-
-const steps = [
-  "Scan the QR code on the household’s container, or type the household number.",
-  "Check each bin: biodegradable, recyclable and residual.",
-  "Save. Points are worked out on the server and the household sees them right away.",
-];
 
 export default async function CollectorHome() {
   const user = await requirePagePermission("collection:read:own");
   const mine = await db.collection.count({ where: { collectorId: user.id } });
+  const { t, intl } = await getI18n();
+  const c = t.collector;
+  const steps = [c.how1, c.how2, c.how3];
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Collector portal" title={`Hello, ${user.name.split(" ")[0]}`} />
+      <PageHeader eyebrow={c.portal} title={format(c.hello, { name: user.name.split(" ")[0] })} />
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <section aria-labelledby="scan-h" className="surface-forest rounded-[1.75rem] p-6 text-center shadow-lift lg:p-10">
           <h2 id="scan-h" className="sr-only">
-            Scan
+            {t.common.scan}
           </h2>
           <span className="relative mx-auto grid h-24 w-24 place-items-center">
             <span aria-hidden="true" className="absolute inset-0 rounded-[1.75rem] bg-lawn/25 blur-xl" />
@@ -36,18 +35,18 @@ export default async function CollectorHome() {
           </span>
           <Link href="/collector/scan" className="btn btn-lawn mt-6 w-full py-5 text-lg">
             <Icon name="qr" className="h-7 w-7" />
-            Scan household QR
+            {c.scanHousehold}
           </Link>
-          <p className="mt-3 text-sm text-mint">Works without signal too. Scans are saved on this phone and sent when you’re back online.</p>
+          <p className="mt-3 text-sm text-mint">{c.worksOffline}</p>
         </section>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <StatCard label="Collections recorded" value={formatPoints(mine)} icon="check" />
+          <StatCard label={c.recorded} value={formatPoints(mine, intl)} icon="check" />
           <SyncStatusCard collectorId={user.id} />
         </div>
       </div>
 
-      <SectionCard id="how" title="How scanning works">
+      <SectionCard id="how" title={c.howTitle}>
         <ol className="grid gap-4 md:grid-cols-3">
           {steps.map((s, i) => (
             <li key={s} className="flex gap-3">

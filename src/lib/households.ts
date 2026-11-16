@@ -6,6 +6,12 @@ import { db } from "./db";
 import { generateClaimCode, generateQrToken, normalizeClaimCode } from "./codes";
 import { parseLoginId } from "./identifiers";
 import { normalizeHouseholdCode } from "./collection-input";
+import { en } from "./i18n/en";
+import { format } from "./i18n/config";
+
+/** Sign-up messages in one language. Callers pass the reader's; English by default. */
+export type RegisterMessages = { [K in keyof typeof en.errors.register]: string };
+const EN_REGISTER: RegisterMessages = en.errors.register;
 
 // Creating households and linking resident accounts to them.
 //
@@ -67,26 +73,27 @@ export async function withNumberRetry<T>(run: () => Promise<T>): Promise<T> {
 
 // ---------- Resident registration ----------
 
-const accountSchema = z.object({
-  name: z.string().trim().min(2, "Enter your full name.").max(80),
-  identifier: z.string().trim().min(1, "Enter your email or mobile number."),
-  password: z.string().min(8, "Use at least 8 characters.").max(200),
-  confirm: z.string(),
-  terms: z.literal("on", { error: "Agree to the Terms & Privacy to continue." }),
-});
-
-const registerSchema = z.discriminatedUnion("mode", [
-  accountSchema.extend({
-    mode: z.literal("new"),
-    householdName: householdFieldsSchema.shape.name,
-    address: householdFieldsSchema.shape.address,
-    purok: householdFieldsSchema.shape.purok,
-  }),
-  accountSchema.extend({
-    mode: z.literal("join"),
-    householdCode: z.string().trim().min(1, "Enter the sign-up code."),
-  }),
-]);
+function registerSchema(m: RegisterMessages) {
+  const account = z.object({
+    name: z.string().trim().min(2, m.fullName).max(80),
+    identifier: z.string().trim().min(1, m.identifier),
+    password: z.string().min(8, m.password).max(200),
+    confirm: z.string(),
+    terms: z.literal("on", { error: m.terms }),
+  });
+  return z.discriminatedUnion("mode", [
+    account.extend({
+      mode: z.literal("new"),
+      householdName: z.string().trim().min(2, m.householdName).max(80),
+      address: z.string().trim().min(3, m.address).max(160),
+      purok: z.string().trim().min(1, m.purok).max(40),
+    }),
+    account.extend({
+      mode: z.literal("join"),
+      householdCode: z.string().trim().min(1, m.code),
+    }),
+  ]);
+}
 
 export type RegisterResult =
   | { ok: true; userId: string; householdCode: string; joined: boolean }
@@ -99,16 +106,16 @@ class FieldError extends Error {
 }
 
 /** Creates a resident account and either registers a new (PENDING) household or joins one with its sign-up code. */
-export async function registerResident(raw: Record<string, unknown>): Promise<RegisterResult> {
-  const parsed = registerSchema.safeParse({ ...raw, mode: raw.mode === "join" ? "join" : "new" });
+export async function registerResident(raw: Record<string, unknown>, m: RegisterMessages = EN_REGISTER): Promise<RegisterResult> {
+  const parsed = registerSchema(m).safeParse({ ...raw, mode: raw.mode === "join" ? "join" : "new" });
   const fieldErrors: Record<string, string> = {};
   if (!parsed.success) {
     for (const i of parsed.error.issues) fieldErrors[String(i.path[0] ?? "form")] ??= i.message;
   } else if (parsed.data.password !== parsed.data.confirm) {
-    fieldErrors.confirm = "Passwords don't match.";
+    fieldErrors.confirm = m.confirm;
   }
   const id = typeof raw.identifier === "string" ? parseLoginId(raw.identifier) : null;
-  if (!id && !fieldErrors.identifier) fieldErrors.identifier = "Enter a valid email or a Philippine mobile number (09XX XXX XXXX).";
+  if (!id && !fieldErrors.identifier) fieldErrors.identifier = m.identifierInvalid;
   if (!parsed.success || Object.keys(fieldErrors).length || !id) return { ok: false, fieldErrors };
 
   const input = parsed.data;
@@ -131,8 +138,8 @@ export async function registerResident(raw: Record<string, unknown>): Promise<Re
           return { ok: true, userId: user.id, householdCode: household.code, joined: false } as const;
         }
 
-        const household = await lockHouseholdByClaimCode(tx, input.householdCode);
-        await assertRoomFor(tx, household.id);
+        const household = await lockHouseholdByClaimCode(tx, input.householdCode, m);
+        await assertRoomFor(tx, household.id, m);
         const user = await tx.user.create({ data: { name: input.name, role: "CITIZEN", passwordHash, householdId: household.id, ...login } });
         if (!household.claimedAt) await tx.household.update({ where: { id: household.id }, data: { claimedAt: new Date() } });
         await tx.auditLog.create({
@@ -143,26 +150,26 @@ export async function registerResident(raw: Record<string, unknown>): Promise<Re
     );
   } catch (e) {
     if (e instanceof FieldError) return { ok: false, fieldErrors: { [e.field]: e.message } };
-    if (isLoginClash(e)) return { ok: false, fieldErrors: { identifier: "An account with this email or number already exists." } };
+    if (isLoginClash(e)) return { ok: false, fieldErrors: { identifier: m.identifierTaken } };
     throw e;
   }
 }
 
 /** Finds a joinable household by sign-up code and locks it, so concurrent joins count members one at a time. */
-async function lockHouseholdByClaimCode(tx: Tx, rawCode: string, field = "householdCode") {
+async function lockHouseholdByClaimCode(tx: Tx, rawCode: string, m: RegisterMessages, field = "householdCode") {
   const claimCode = normalizeClaimCode(rawCode);
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Household" WHERE "claimCode" = ${claimCode} FOR UPDATE`;
   const household = rows[0] && (await tx.household.findUnique({ where: { id: rows[0].id } }));
   if (!household || household.status === "INACTIVE") {
-    throw new FieldError(field, "This code isn’t valid. Check it with your family or the barangay office.");
+    throw new FieldError(field, m.codeInvalid);
   }
   return household;
 }
 
-async function assertRoomFor(tx: Tx, householdId: string, field = "householdCode") {
+async function assertRoomFor(tx: Tx, householdId: string, m: RegisterMessages = EN_REGISTER, field = "householdCode") {
   const members = await tx.user.count({ where: { householdId } });
   if (members >= MAX_MEMBERS) {
-    throw new FieldError(field, `This household already has ${MAX_MEMBERS} accounts, the most allowed. Ask the barangay office for help.`);
+    throw new FieldError(field, format(m.householdFull, { max: MAX_MEMBERS }));
   }
 }
 
@@ -203,7 +210,7 @@ export async function linkResident(
         if (!rows[0]) throw new FieldError("household", "No household has that number.");
         target = rows[0];
         if (target.id === user.householdId) return { ok: true } as const;
-        await assertRoomFor(tx, target.id, "household");
+        await assertRoomFor(tx, target.id, EN_REGISTER, "household");
       }
       await tx.user.update({ where: { id: userId }, data: { householdId: target?.id ?? null } });
       if (target) await tx.household.updateMany({ where: { id: target.id, claimedAt: null }, data: { claimedAt: new Date() } });

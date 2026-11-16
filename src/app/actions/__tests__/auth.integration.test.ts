@@ -13,6 +13,7 @@ vi.mock("next/headers", () => ({
     set: (k: string, v: string) => void jar.set(k, v),
     delete: (k: string) => void jar.delete(k),
   }),
+  headers: async () => new Headers(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next/navigation", () => ({

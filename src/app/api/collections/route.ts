@@ -1,5 +1,6 @@
 import { authorizeJson, jsonResponse } from "@/lib/api";
 import { recordCollection, type RecordErrorCode } from "@/lib/collections";
+import { getI18n } from "@/lib/i18n/server";
 
 // POST /api/collections: record one collection from the collector's device (live or from the offline queue).
 //
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   const auth = await authorizeJson(request, "collection:create");
   if (auth instanceof Response) return auth;
 
-  const result = await recordCollection(auth.user.id, auth.body);
+  const { t } = await getI18n(); // messages in the collector's language (an offline queue keeps them as sent)
+  const result = await recordCollection(auth.user.id, auth.body, new Date(), t.errors.collection);
   return jsonResponse(result, result.ok ? (result.replay ? 200 : 201) : STATUS[result.error]);
 }

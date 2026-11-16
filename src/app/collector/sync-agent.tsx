@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
 import { enforceDirectoryOwner, refreshCounts, refreshDirectory, syncAll, syncStatus } from "@/lib/offline/queue";
+import { useI18n } from "@/components/i18n";
+import { plural } from "@/lib/i18n/config";
 
 export const useSyncStatus = () => useSyncExternalStore(syncStatus.subscribe, syncStatus.get, syncStatus.server);
 
@@ -15,6 +17,8 @@ const TICK_MS = 15_000; // checks for items whose retry time has come; cheap whe
 export function SyncAgent({ collectorId }: { collectorId: string }) {
   const pathname = usePathname();
   const s = useSyncStatus();
+  const { t } = useI18n();
+  const c = t.collector;
 
   useEffect(() => {
     let cancelled = false;
@@ -58,13 +62,13 @@ export function SyncAgent({ collectorId }: { collectorId: string }) {
   let text = "";
   if (s.signedOut && s.pending > 0) {
     tone = "warn";
-    text = `You’re signed out. Sign in to send ${s.pending} saved ${s.pending === 1 ? "scan" : "scans"}.`;
+    text = plural(s.pending, c.bannerSignedOutOne, c.bannerSignedOutOther);
   } else if (s.attention > 0) {
     tone = "warn";
-    text = `${s.attention} saved ${s.attention === 1 ? "scan needs" : "scans need"} your attention.`;
+    text = plural(s.attention, c.bannerAttentionOne, c.bannerAttentionOther);
   } else if (s.pending > 0) {
     tone = "info";
-    text = `${s.pending} ${s.pending === 1 ? "scan is" : "scans are"} waiting to send. They’ll go automatically when there’s signal.`;
+    text = plural(s.pending, c.bannerPendingOne, c.bannerPendingOther);
   }
   if (!tone) return null;
 

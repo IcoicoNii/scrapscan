@@ -86,8 +86,24 @@ npm test        # unit tests always; the auth/RBAC integration tests run when DA
   open requests per household. The catalogue is managed on the same page.
 - **Collections and audit:** `/admin/collections` shows one Manila day (filter by collector/status); `/admin/audit` lists
   every audited change with who, when and why.
+- **Analytics:** `/admin/analytics` (7 / 30 / 90 days): households reached, sorting quality (share of 10/5/0-point
+  collections), points earned vs spent, purok comparison and collector activity; the overview has a 14-day chart.
+  Numbers are computed in `src/lib/analytics.ts` (pure, unit-tested) from rows loaded by `analytics-data.ts`. Charts are
+  plain SVG (`src/components/charts.tsx`), with a hover/arrow-key readout and a "Show data" table; colors in
+  `src/lib/chart-colors.ts` were checked for color-blind separation.
+- **Password reset by email:** `/forgot-password` → emailed link → `/reset-password`. Only a SHA-256 of the token is
+  stored; it works once, for 30 minutes; a newer link cancels older ones; max 3 per account per hour; the page answers
+  the same whether or not the email has an account, and the email is sent after the response. A reset signs the
+  account out everywhere. Links use `APP_URL` (never the request's Host header). Set `SMTP_*`, `MAIL_FROM` and `APP_URL`
+  (see `.env.example`); without them, development prints the email to the console and production falls back to
+  "ask your barangay admin". Accounts with only a mobile number still get admin resets.
+- **Languages (English / Filipino):** resident, collector, sign-in and public pages; admin pages stay English. The
+  choice is a cookie (`ss_lang`, EN | FIL switch in the menus and sign-in pages), defaulting to the browser's language.
+  Dictionaries are `src/lib/i18n/en.ts` and `fil.ts` (the compiler and a test check they match); privacy and terms keep
+  a full text per language. Server messages shown to residents and collectors (scan errors, sign-up, rewards) are
+  translated too. **Have a native speaker review `fil.ts` before the pilot.**
 - **Neon:** `DATABASE_URL` = pooled string, `DIRECT_URL` = direct string.
 
 ## Not built yet (shown as unavailable in the UI, never as dead buttons)
 
-Analytics charts, password reset by email (admins reset passwords for now), Filipino/English toggle.
+Password reset by text message (mobile-only accounts use admin resets), translated browser-tab titles.

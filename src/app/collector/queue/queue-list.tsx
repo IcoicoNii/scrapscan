@@ -7,9 +7,13 @@ import { EmptyState, Notice } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { dismiss, listItems, syncAll, type QueueItem } from "@/lib/offline/queue";
 import { useSyncStatus } from "../sync-agent";
+import { useI18n } from "@/components/i18n";
+import { format, plural } from "@/lib/i18n/config";
 
 export function QueueList({ collectorId }: { collectorId: string }) {
   const s = useSyncStatus();
+  const { t } = useI18n();
+  const c = t.collector;
   const [items, setItems] = useState<QueueItem[] | null>(null);
 
   // Reload whenever the counts change (an item sent, failed or was dismissed).
@@ -24,7 +28,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
   }, [collectorId, s.pending, s.attention, s.lastSentAt]);
 
   if (!s.storage) {
-    return <Notice tone="warn">This browser can’t save scans on the phone, so there’s nothing stored here. You need signal to save.</Notice>;
+    return <Notice tone="warn">{c.savedNoStorage}</Notice>;
   }
   if (items === null) return <div aria-busy="true" className="skeleton h-24" />;
 
@@ -35,25 +39,24 @@ export function QueueList({ collectorId }: { collectorId: string }) {
     <div className="space-y-6">
       {s.signedOut && pending.length > 0 && (
         <Notice tone="warn">
-          You’re signed out, so these can’t be sent yet.{" "}
-          <a href="/login" className="font-bold underline">Sign in</a> and they’ll send automatically.
+          {c.savedSignedOut}{" "}
+          <a href="/login" className="font-bold underline">{t.common.signIn}</a> {c.savedSignedOutAfter}
         </Notice>
       )}
       {s.otherAccounts > 0 && (
         <Notice>
-          {s.otherAccounts} saved {s.otherAccounts === 1 ? "scan belongs" : "scans belong"} to another collector account
-          on this phone. {s.otherAccounts === 1 ? "It’ll" : "They’ll"} send when that account signs in.
+          {plural(s.otherAccounts, c.otherAccountsOne, c.otherAccountsOther)}
         </Notice>
       )}
 
       {items.length === 0 ? (
-        <EmptyState icon="check" title="Nothing waiting" body="Every scan saved on this phone has been sent." />
+        <EmptyState icon="check" title={c.nothingWaiting} body={c.nothingWaitingBody} />
       ) : null}
 
       {attention.length > 0 && (
         <section aria-labelledby="attention-h" className="space-y-3">
-          <h2 id="attention-h" className="text-lg font-bold">Needs your attention ({attention.length})</h2>
-          <p className="text-sm text-slate-green">The server didn’t accept these. Read the reason, then dismiss.</p>
+          <h2 id="attention-h" className="text-lg font-bold">{format(c.attentionTitle, { n: attention.length })}</h2>
+          <p className="text-sm text-slate-green">{c.attentionIntro}</p>
           <ul className="space-y-3">
             {attention.map((i) => (
               <li key={i.id} className="card space-y-3">
@@ -63,7 +66,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
                   {i.error?.message}
                 </p>
                 <button type="button" onClick={() => dismiss(i.id, collectorId)} className="btn btn-outline btn-sm">
-                  Dismiss
+                  {t.common.dismiss}
                 </button>
               </li>
             ))}
@@ -74,7 +77,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
       {pending.length > 0 && (
         <section aria-labelledby="pending-h" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="pending-h" className="text-lg font-bold">Waiting to send ({pending.length})</h2>
+            <h2 id="pending-h" className="text-lg font-bold">{format(c.pendingTitle, { n: pending.length })}</h2>
             {!s.signedOut && (
               <button
                 type="button"
@@ -82,7 +85,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
                 onClick={() => syncAll(collectorId, { force: true })}
                 className="btn btn-primary btn-sm"
               >
-                {s.syncing ? "Sending…" : "Send now"}
+                {s.syncing ? t.common.sending : t.common.sendNow}
               </button>
             )}
           </div>
@@ -93,7 +96,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
                 <BinChips bins={i.payload.bins} />
                 {i.attempts > 0 && (
                   <p className="text-sm text-slate-green">
-                    Tried {i.attempts} {i.attempts === 1 ? "time" : "times"}. Trying again automatically.
+                    {plural(i.attempts, c.triedOne, c.triedOther)}
                   </p>
                 )}
               </li>
@@ -106,16 +109,18 @@ export function QueueList({ collectorId }: { collectorId: string }) {
 }
 
 function ItemHeader({ item }: { item: QueueItem }) {
+  const { t, intl } = useI18n();
+  const c = t.collector;
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="font-bold">{item.household ? item.household.name : "Household not confirmed yet"}</p>
+        <p className="font-bold">{item.household ? item.household.name : c.notConfirmed}</p>
         <p className="text-sm text-slate-green">
           {item.household?.code ??
-            ("code" in item.payload.household ? `Typed: ${item.payload.household.code}` : "Scanned QR code")}
+            ("code" in item.payload.household ? format(c.typed, { code: item.payload.household.code }) : c.scannedQr)}
         </p>
       </div>
-      <p className="shrink-0 text-right text-sm text-slate-green">{formatDateTime(new Date(item.payload.collectedAt))}</p>
+      <p className="shrink-0 text-right text-sm text-slate-green">{formatDateTime(new Date(item.payload.collectedAt), intl)}</p>
     </div>
   );
 }

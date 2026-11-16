@@ -6,6 +6,7 @@ import { registerAction, type FormState } from "@/app/actions/auth";
 import { AuthFrame } from "@/components/auth-frame";
 import { TextField } from "@/components/fields";
 import { Icon } from "@/components/icons";
+import { useI18n } from "@/components/i18n";
 
 type Mode = "new" | "join";
 
@@ -13,6 +14,8 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(registerAction, undefined);
   // Controlled, so the choice survives React resetting the form after an error.
   const [mode, setMode] = useState<Mode>("new");
+  const { t } = useI18n();
+  const r = t.register;
   const e = state?.fieldErrors ?? {};
   const v = state?.values ?? {};
 
@@ -22,19 +25,19 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
         <header className="surface-forest rounded-b-4xl px-6 pb-10 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 md:pt-8">
           <Link href="/" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold hover:underline lg:hidden">
             <Icon name="arrow-left" className="h-5 w-5" />
-            Home
+            {t.common.home}
           </Link>
           <h1 className="mt-4 text-4xl leading-tight tracking-tight">
-            <span className="block font-light text-mint">Let’s</span>
-            <span className="block font-extrabold">Create Your</span>
-            <span className="block font-extrabold">Account</span>
+            <span className="block font-light text-mint">{r.title1}</span>
+            <span className="block font-extrabold">{r.title2}</span>
+            <span className="block font-extrabold">{r.title3}</span>
           </h1>
         </header>
 
         <form action={formAction} noValidate className="space-y-4 px-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-8 text-slate-green sm:px-8 md:pb-10">
-          <TextField label="Full name" name="name" autoComplete="name" required defaultValue={v.name} error={e.name} />
+          <TextField label={r.fullName} name="name" autoComplete="name" required defaultValue={v.name} error={e.name} />
           <TextField
-            label="Email or mobile number"
+            label={r.identifier}
             name="identifier"
             autoComplete="username"
             inputMode="email"
@@ -44,11 +47,11 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
           />
 
           <fieldset className="space-y-2">
-            <legend className="mb-1 text-sm font-semibold text-khaki">Your household</legend>
+            <legend className="mb-1 text-sm font-semibold text-khaki">{r.household}</legend>
             {(
               [
-                ["new", "Register my household", "First in your family to sign up. You’ll get your QR code right away."],
-                ["join", "I have a sign-up code", "From a family member’s profile or a slip from the barangay."],
+                ["new", r.newLabel, r.newNote],
+                ["join", r.joinLabel, r.joinNote],
               ] as const
             ).map(([value, label, note]) => (
               <label
@@ -74,24 +77,24 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
           {mode === "new" ? (
             <>
               <TextField
-                label="Household name"
+                label={r.householdName}
                 name="householdName"
-                placeholder="Dela Cruz household"
+                placeholder={r.householdNamePlaceholder}
                 required
                 defaultValue={v.householdName}
                 error={e.householdName}
               />
               <TextField
-                label="Address"
+                label={r.address}
                 name="address"
-                placeholder="Street, block and lot"
+                placeholder={r.addressPlaceholder}
                 autoComplete="street-address"
                 required
                 defaultValue={v.address}
                 error={e.address}
               />
               <TextField
-                label="Purok or sitio"
+                label={r.purok}
                 name="purok"
                 list="puroks"
                 placeholder="Purok 1"
@@ -103,38 +106,38 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
                 {puroks.map((p) => <option key={p} value={p} />)}
               </datalist>
               <p className="rounded-2xl bg-cream/70 px-4 py-3 text-sm text-khaki">
-                The barangay office checks new households before collections count. You can print your QR code while you wait.
+                {r.approvalNote}
               </p>
             </>
           ) : (
             <TextField
-              label="Sign-up code"
+              label={r.code}
               name="householdCode"
               autoComplete="off"
               autoCapitalize="characters"
               required
-              hint="8 letters and numbers, like K7QM-4XD9."
+              hint={r.codeHint}
               defaultValue={v.householdCode}
               error={e.householdCode}
             />
           )}
 
-          <TextField label="Password" name="password" type="password" autoComplete="new-password" required hint="At least 8 characters." error={e.password} />
-          <TextField label="Retype password" name="confirm" type="password" autoComplete="new-password" required error={e.confirm} />
+          <TextField label={r.password} name="password" type="password" autoComplete="new-password" required hint={r.passwordHint} error={e.password} />
+          <TextField label={r.confirm} name="confirm" type="password" autoComplete="new-password" required error={e.confirm} />
 
           <div>
             <div className="flex min-h-11 items-center gap-3 text-sm">
               <input id="terms" type="checkbox" name="terms" className="h-6 w-6 shrink-0 accent-forest" required />
               <label htmlFor="terms">
-                I agree to the{" "}
+                {r.agree}{" "}
                 <Link href="/terms" target="_blank" className="font-bold underline underline-offset-4">
-                  Terms
+                  {t.common.terms}
                 </Link>{" "}
-                and{" "}
+                {r.and}{" "}
                 <Link href="/privacy" target="_blank" className="font-bold underline underline-offset-4">
-                  Privacy notice
+                  {r.privacyNotice}
                 </Link>
-                <span className="sr-only"> (open in a new tab)</span>
+                <span className="sr-only"> {r.newTab}</span>
               </label>
             </div>
             {e.terms && <p className="px-2 text-sm font-medium text-danger">{e.terms}</p>}
@@ -142,16 +145,16 @@ export function RegisterScreen({ puroks }: { puroks: string[] }) {
 
           {Object.keys(e).length > 0 && (
             <p role="alert" className="text-sm font-semibold text-danger">
-              Check the highlighted fields.
+              {r.checkFields}
             </p>
           )}
           <button type="submit" disabled={pending} className="btn btn-primary w-full">
-            {pending ? "Creating account…" : "Sign up"}
+            {pending ? r.submitting : r.submit}
           </button>
           <p className="pt-2 text-center text-sm">
-            Have an account?{" "}
+            {r.haveAccount}{" "}
             <Link href="/login" className="font-bold underline underline-offset-4">
-              Log in
+              {t.common.logIn}
             </Link>
           </p>
         </form>

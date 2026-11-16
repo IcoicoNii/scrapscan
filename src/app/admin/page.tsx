@@ -5,7 +5,11 @@ import { requirePagePermission } from "@/lib/auth";
 import { formatPoints } from "@/lib/format";
 import { countFlagged } from "@/lib/reviews";
 import { Icon } from "@/components/icons";
-import { EmptyState, PageHeader, ProgressBar, SectionCard, StatCard } from "@/components/ui";
+import { PageHeader, ProgressBar, SectionCard, StatCard } from "@/components/ui";
+import { ColumnChart } from "@/components/charts";
+import { CHART_COLORS } from "@/lib/chart-colors";
+import { bucketLabel } from "@/lib/analytics";
+import { recentCollections } from "@/lib/analytics-data";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -24,6 +28,7 @@ export default async function AdminOverview() {
     db.redemption.count({ where: { status: "REQUESTED" } }),
     db.household.count({ where: { status: "PENDING" } }),
   ]);
+  const recent = await recentCollections(14);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 
   return (
@@ -141,13 +146,23 @@ export default async function AdminOverview() {
         </SectionCard>
       </div>
 
-      {collections === 0 && (
-        <EmptyState
-          icon="chart"
-          title="No collections recorded yet"
-          body="Charts and trends will appear here once collectors start submitting."
+      <SectionCard
+        id="trend"
+        title="Last 14 days"
+        action={
+          <Link href="/admin/analytics" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest hover:underline">
+            See analytics <Icon name="chevron-right" className="h-4 w-4" />
+          </Link>
+        }
+      >
+        <ColumnChart
+          title="Households collected per day"
+          height={180}
+          columns={recent.map((d) => ({ key: d.day, label: bucketLabel(d.day, "day"), values: [d.collected] }))}
+          series={[{ name: "Households collected", color: CHART_COLORS.primary }]}
+          emptyText="No collections recorded yet. The chart fills in once collectors start submitting."
         />
-      )}
+      </SectionCard>
     </div>
   );
 }

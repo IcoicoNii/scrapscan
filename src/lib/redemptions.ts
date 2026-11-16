@@ -2,6 +2,12 @@ import "server-only";
 import { z } from "zod";
 import type { RedemptionStatus } from "@prisma/client";
 import { db } from "./db";
+import { en } from "./i18n/en";
+import { format } from "./i18n/config";
+
+/** Reward messages in one language (resident actions pass the reader's; admin uses English). */
+export type RewardMessages = { [K in keyof typeof en.errors.rewards]: string };
+const EN_REWARDS: RewardMessages = en.errors.rewards;
 
 // Rewards and redemptions. The only place REDEMPTION_HOLD rows are written.
 //
@@ -56,27 +62,31 @@ export async function saveReward(adminId: string, rewardId: string | null, raw: 
 
 // ---------- Requests (resident) ----------
 
-export async function requestReward(user: { id: string; householdId: string | null }, rewardId: unknown): Promise<Result<{ redemptionId: string }>> {
-  if (!user.householdId) return { ok: false, message: "Your account isn’t linked to a household." };
-  if (typeof rewardId !== "string" || !rewardId) return { ok: false, message: "Choose a reward." };
+export async function requestReward(
+  user: { id: string; householdId: string | null },
+  rewardId: unknown,
+  m: RewardMessages = EN_REWARDS,
+): Promise<Result<{ redemptionId: string }>> {
+  if (!user.householdId) return { ok: false, message: m.noHousehold };
+  if (typeof rewardId !== "string" || !rewardId) return { ok: false, message: m.choose };
   const householdId = user.householdId;
 
   return db.$transaction(async (tx) => {
     // Serialize this household's spending: two taps at once can't both pass the balance check.
     await tx.$queryRaw`SELECT id FROM "Household" WHERE id = ${householdId} FOR UPDATE`;
     const reward = await tx.reward.findUnique({ where: { id: rewardId } });
-    if (!reward || !reward.active) return { ok: false, message: "This reward isn’t available any more." } as const;
+    if (!reward || !reward.active) return { ok: false, message: m.unavailable } as const;
     const open = await tx.redemption.count({ where: { householdId, status: { in: ["REQUESTED", "APPROVED"] } } });
     if (open >= MAX_OPEN_REQUESTS) {
-      return { ok: false, message: `You already have ${open} open requests. Wait for one to be decided or picked up first.` } as const;
+      return { ok: false, message: format(m.tooManyOpen, { n: open }) } as const;
     }
     const balance = await balanceOf(householdId, tx);
     if (balance < reward.pointsCost) {
-      return { ok: false, message: `You need ${reward.pointsCost - balance} more points for this reward.` } as const;
+      return { ok: false, message: format(m.needMore, { n: reward.pointsCost - balance }) } as const;
     }
     if (reward.stock !== null) {
       const { count } = await tx.reward.updateMany({ where: { id: reward.id, stock: { gt: 0 } }, data: { stock: { decrement: 1 } } });
-      if (count === 0) return { ok: false, message: "This reward is out of stock right now." } as const;
+      if (count === 0) return { ok: false, message: m.outOfStock } as const;
     }
     const r = await tx.redemption.create({ data: { householdId, rewardId: reward.id, pointsHeld: reward.pointsCost } });
     await tx.pointsLedger.create({
@@ -118,17 +128,22 @@ export async function decideRedemption(adminId: string, raw: unknown): Promise<R
 }
 
 /** The resident withdraws a request that hasn't been approved yet. */
-export async function cancelRedemption(user: { id: string; householdId: string | null }, redemptionId: unknown): Promise<Result> {
-  if (typeof redemptionId !== "string" || !user.householdId) return { ok: false, message: "That request doesn’t exist." };
+export async function cancelRedemption(
+  user: { id: string; householdId: string | null },
+  redemptionId: unknown,
+  m: RewardMessages = EN_REWARDS,
+): Promise<Result> {
+  if (typeof redemptionId !== "string" || !user.householdId) return { ok: false, message: m.notFound };
   const owned = await db.redemption.count({ where: { id: redemptionId, householdId: user.householdId } });
-  if (!owned) return { ok: false, message: "That request doesn’t exist." };
-  return transition(redemptionId, "cancel", { actorId: user.id, decidedById: null, note: "Cancelled by the resident" });
+  if (!owned) return { ok: false, message: m.notFound };
+  return transition(redemptionId, "cancel", { actorId: user.id, decidedById: null, note: "Cancelled by the resident" }, m);
 }
 
 async function transition(
   redemptionId: string,
   decision: Decision,
   by: { actorId: string; decidedById: string | null; note?: string },
+  m: RewardMessages = EN_REWARDS,
 ): Promise<Result> {
   return db.$transaction(async (tx) => {
     // Compare-and-set on the status: two decisions at once can't both apply.
@@ -138,7 +153,7 @@ async function transition(
     });
     if (count === 0) {
       const exists = await tx.redemption.count({ where: { id: redemptionId } });
-      return { ok: false, message: exists ? "This request was already updated. The list has been refreshed." : "That request doesn’t exist." } as const;
+      return { ok: false, message: exists ? m.alreadyUpdated : m.notFound } as const;
     }
     const r = await tx.redemption.findUniqueOrThrow({
       where: { id: redemptionId },

@@ -2,12 +2,14 @@
 
 import { useId, useState } from "react";
 import type { ActionState } from "@/lib/form-state";
+import { useI18n } from "./i18n";
 
 /** Success, one-time secret and error messages for a form, announced to screen readers. */
-export function FormMessages({ state, pending, pendingText = "Saving…" }: { state: ActionState; pending?: boolean; pendingText?: string }) {
+export function FormMessages({ state, pending, pendingText }: { state: ActionState; pending?: boolean; pendingText?: string }) {
+  const { t } = useI18n();
   return (
     <div aria-live="polite" className="empty:hidden">
-      {pending && <p className="text-sm text-slate-green">{pendingText}</p>}
+      {pending && <p className="text-sm text-slate-green">{pendingText ?? t.common.saving}</p>}
       {!pending && state?.done && (
         <div role="status" className="rounded-2xl border border-forest/15 bg-mint/70 p-3.5 text-sm">
           <p className="font-semibold">{state.done}</p>
@@ -24,17 +26,18 @@ export function FormMessages({ state, pending, pendingText = "Saving…" }: { st
 }
 
 function Secret({ value }: { value: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-2 space-y-2">
       <p className="rounded-xl bg-white px-3 py-2 font-mono text-2xl font-bold tracking-widest text-forest ring-1 ring-line select-all">{value}</p>
-      <p className="text-slate-green">This is shown only once. Give it to them in person or by text, not in a group chat.</p>
+      <p className="text-slate-green">{t.common.secretOnce}</p>
       <button
         type="button"
         className="btn btn-outline btn-sm"
         onClick={() => navigator.clipboard?.writeText(value).then(() => setCopied(true), () => {})}
       >
-        {copied ? "Copied" : "Copy"}
+        {copied ? t.common.copied : t.common.copy}
       </button>
     </div>
   );

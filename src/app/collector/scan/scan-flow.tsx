@@ -19,6 +19,8 @@ import {
   type SendOutcome,
 } from "@/lib/offline/queue";
 import { QrScanner } from "./qr-scanner";
+import { useI18n } from "@/components/i18n";
+import { format } from "@/lib/i18n/config";
 
 // Find household -> check bins -> save -> result.
 // Saving always writes to the phone first (offline queue), then tries to send. The score is never
@@ -42,11 +44,7 @@ type State =
   | { step: "rejected"; household: MaybeHousehold; message: string; collection?: CollectionSummary }
   | { step: "done"; collection: CollectionSummary };
 
-const BINS: { key: keyof Bins; label: string; hint: string }[] = [
-  { key: "biodegradable", label: "Biodegradable", hint: "Food scraps, leaves, garden waste" },
-  { key: "recyclable", label: "Recyclable", hint: "Clean plastic, paper, cans, bottles" },
-  { key: "residual", label: "Residual", hint: "Everything that can’t be composted or recycled" },
-];
+const BINS = ["biodegradable", "recyclable", "residual"] as const;
 
 const LOOKUP_TIMEOUT_MS = 6000; // weak signal: fall back to the phone's list instead of waiting
 
@@ -75,6 +73,8 @@ async function lookupOnline(ref: HouseholdRef): Promise<HouseholdLookup | null> 
 export function ScanFlow({ collectorId }: { collectorId: string }) {
   const [state, setState] = useState<State>({ step: "find" });
   const [code, setCode] = useState("");
+  const { t, intl } = useI18n();
+  const c = t.collector;
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // Move focus to each new step's heading so screen readers and keyboard users follow along.
@@ -119,23 +119,23 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
         return setState({ step: "check", ref, household, offline: true });
       }
       if ("code" in ref && off.haveList) {
-        return setState({ step: "find", message: "No household has that number on this phone’s list. Check the number and try again." });
+        return setState({ step: "find", message: c.notOnList });
       }
       // A QR not on the list (maybe a new household) or no list at all: save it unconfirmed.
       setState({ step: "check", ref, household: null, offline: true });
     },
-    [collectorId],
+    [collectorId, c.notOnList],
   );
 
   const onScan = useCallback(
     (text: string) => {
       const token = text.trim();
       if (!token.startsWith(QR_PREFIX)) {
-        return setState({ step: "find", message: "That isn’t a ScrapScan QR code. Scan the code on the household’s container." });
+        return setState({ step: "find", message: c.notScrapScan });
       }
       lookup({ qrToken: token });
     },
-    [lookup],
+    [lookup, c.notScrapScan],
   );
 
   const show = useCallback(
@@ -164,12 +164,9 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
       step: "failed",
       payload,
       household,
-      message:
-        o.kind === "signed-out"
-          ? "You’ve been signed out. Sign in again in a new tab, then come back and tap Try again."
-          : "No connection, and this browser can’t save scans on the phone. Move to a spot with signal and try again.",
+      message: o.kind === "signed-out" ? c.signedOutRetry : c.noConnection,
     });
-  }, []);
+  }, [c.signedOutRetry, c.noConnection]);
 
   const save = useCallback(
     async (ref: HouseholdRef, household: MaybeHousehold, bins: Bins) => {
@@ -201,7 +198,7 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
   const scanNext = (
     <button type="button" onClick={reset} className="btn btn-primary w-full py-4 text-lg">
       <Icon name="qr" className="h-6 w-6" />
-      Scan next household
+      {c.scanNext}
     </button>
   );
 
@@ -210,7 +207,7 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "looking":
       return (
         <div className="space-y-5">
-          {heading(state.step === "looking" ? "Finding household…" : "Scan the household QR")}
+          {heading(state.step === "looking" ? c.finding : c.scanTitle)}
           {state.step === "find" && state.message && <Notice tone="warn">{state.message}</Notice>}
           {state.step === "find" ? (
             <QrScanner onScan={onScan} />
@@ -225,8 +222,8 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
             }}
           >
             <TextField
-              label="Or type the household number"
-              hint="Printed under the QR code, for example 42 or HH-00042."
+              label={c.typeLabel}
+              hint={c.typeHint}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               autoComplete="off"
@@ -237,7 +234,7 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
             />
             <button type="submit" className="btn btn-outline w-full" disabled={state.step === "looking" || !code.trim()}>
               <Icon name="search" className="h-5 w-5" />
-              Find household
+              {c.find}
             </button>
           </form>
         </div>
@@ -246,13 +243,13 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "already":
       return (
         <div className="space-y-5">
-          {heading("Already collected today")}
+          {heading(c.alreadyTitle)}
           <HouseholdCard household={state.household} />
           <Notice>
             {state.fromPhone
-              ? "This household already has a collection today (recorded earlier, or saved on this phone). "
-              : `This household was collected at ${formatDateTime(new Date(state.collectedAt!))} and earned ${state.score} points. `}
-            Only one collection per household is recorded each day.
+              ? c.alreadyFromPhone
+              : format(c.alreadyAt, { time: formatDateTime(new Date(state.collectedAt!), intl), n: state.score ?? 0 })}{" "}
+            {c.onePerDay}
           </Notice>
           {scanNext}
         </div>
@@ -273,7 +270,7 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "saving":
       return (
         <div className="space-y-5" aria-busy="true">
-          {heading("Saving…")}
+          {heading(c.savingTitle)}
           <HouseholdCard household={state.household} />
           <BinChips bins={state.payload.bins} />
         </div>
@@ -282,25 +279,21 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "queued":
       return (
         <div className="space-y-5">
-          {heading("Saved on this phone")}
+          {heading(c.queuedTitle)}
           <HouseholdCard household={state.household} />
           <BinChips bins={state.payload.bins} />
           <Notice>
-            {state.reason === "signed-out"
-              ? "You’re signed out, so it can’t be sent yet. It’s safe on this phone and will send after you sign in."
-              : state.reason === "forbidden"
-                ? "This account can’t record collections right now. It’s kept on this phone. Ask your barangay admin."
-                : "No signal right now. It’s safe on this phone and will send automatically when you’re back online. Its points will show once it’s sent."}
+            {state.reason === "signed-out" ? c.queuedSignedOut : state.reason === "forbidden" ? c.queuedForbidden : c.queuedOffline}
           </Notice>
           <div className="grid gap-3">
             {scanNext}
             {state.reason === "signed-out" && (
               <a href="/login" className="btn btn-outline w-full">
-                Sign in
+                {t.common.signIn}
               </a>
             )}
             <Link href="/collector/queue" className="btn btn-ghost w-full">
-              See saved scans
+              {c.seeSaved}
             </Link>
           </div>
         </div>
@@ -309,16 +302,16 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "failed":
       return (
         <div className="space-y-5">
-          {heading("Not saved yet")}
+          {heading(c.failedTitle)}
           <HouseholdCard household={state.household} />
           <Notice tone="warn">{state.message}</Notice>
           <BinChips bins={state.payload.bins} />
           <div className="grid gap-3">
             <button type="button" onClick={() => sendWithoutStorage(state.payload, state.household)} className="btn btn-primary w-full py-4 text-lg">
-              Try again
+              {t.common.tryAgain}
             </button>
             <button type="button" onClick={reset} className="btn btn-ghost w-full">
-              Discard and scan another
+              {c.discard}
             </button>
           </div>
         </div>
@@ -327,15 +320,15 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
     case "rejected":
       return (
         <div className="space-y-5">
-          {heading("Couldn’t record this")}
+          {heading(c.rejectedTitle)}
           <HouseholdCard household={state.household} />
           <Notice tone="warn">{state.message}</Notice>
           {state.collection && (
             <div className="card space-y-2">
               <p className="text-sm font-semibold text-slate-green">
-                Recorded collection · {formatDateTime(new Date(state.collection.collectedAt))}
+                {format(c.recordedCollection, { time: formatDateTime(new Date(state.collection.collectedAt), intl) })}
               </p>
-              <p className="font-bold">{state.collection.score} points</p>
+              <p className="font-bold">{format(c.nPoints, { n: state.collection.score })}</p>
             </div>
           )}
           {scanNext}
@@ -343,25 +336,25 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
       );
 
     case "done": {
-      const c = state.collection;
+      const col = state.collection;
       return (
         <div className="space-y-5">
-          {heading("Collection saved")}
+          {heading(c.savedDone)}
           <section className="surface-forest rounded-[1.75rem] p-6 text-center shadow-lift">
             <p className="text-sm font-semibold text-mint">
-              {c.householdName} · {c.householdCode}
+              {col.householdName} · {col.householdCode}
             </p>
-            <p className="mt-2 text-5xl font-extrabold tabular-nums">{c.score > 0 ? `+${c.score}` : "0"}</p>
+            <p className="mt-2 text-5xl font-extrabold tabular-nums">{col.score > 0 ? `+${col.score}` : "0"}</p>
             <p className="mt-1 text-white/90">
-              {c.score > 0 ? "points for this household" : "No points this time: two or more bins were contaminated."}
+              {col.score > 0 ? c.pointsForHousehold : c.noPoints}
             </p>
           </section>
           <button type="button" onClick={reset} className="btn btn-lawn w-full py-5 text-lg">
             <Icon name="qr" className="h-7 w-7" />
-            Scan next household
+            {c.scanNext}
           </button>
           <Link href="/collector" className="btn btn-ghost w-full">
-            Back to home
+            {t.common.backToHome}
           </Link>
         </div>
       );
@@ -370,6 +363,7 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
 }
 
 function HouseholdCard({ household }: { household: MaybeHousehold }) {
+  const { t } = useI18n();
   if (!household) {
     return (
       <div className="card flex items-start gap-4">
@@ -377,10 +371,8 @@ function HouseholdCard({ household }: { household: MaybeHousehold }) {
           <Icon name="info" className="h-6 w-6" />
         </span>
         <div className="min-w-0">
-          <p className="text-lg font-bold leading-tight">Household not confirmed yet</p>
-          <p className="mt-0.5 text-sm text-slate-green">
-            This QR code isn’t on this phone’s list. It will be checked when the scan is sent.
-          </p>
+          <p className="text-lg font-bold leading-tight">{t.collector.notConfirmed}</p>
+          <p className="mt-0.5 text-sm text-slate-green">{t.collector.notConfirmedBody}</p>
         </div>
       </div>
     );
@@ -417,7 +409,9 @@ function Checklist({
 }) {
   // No defaults: each bin has to be checked on purpose.
   const [bins, setBins] = useState<Partial<Bins>>({});
-  const complete = BINS.every((b) => bins[b.key]);
+  const complete = BINS.every((b) => bins[b]);
+  const { t } = useI18n();
+  const c = t.collector;
 
   return (
     <form
@@ -428,25 +422,25 @@ function Checklist({
       }}
     >
       <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-extrabold tracking-tight">
-        Check the bins
+        {c.checkBins}
       </h2>
       {offline && (
-        <Notice>No signal. You can still check the bins: the scan will be saved on this phone and sent later.</Notice>
+        <Notice>{c.offlineCheck}</Notice>
       )}
       <HouseholdCard household={household} />
       <button type="button" onClick={onBack} className="btn btn-ghost btn-sm -mt-2">
         <Icon name="arrow-left" className="h-5 w-5" />
-        Wrong household? Scan again
+        {c.wrongHousehold}
       </button>
 
       {BINS.map((b) => (
-        <fieldset key={b.key} className="card">
-          <legend className="text-lg font-bold">{b.label}</legend>
-          <p className="text-sm text-slate-green">{b.hint}</p>
+        <fieldset key={b} className="card">
+          <legend className="text-lg font-bold">{t.bins[b]}</legend>
+          <p className="text-sm text-slate-green">{t.bins[`${b}Hint`]}</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
             {(["CORRECT", "CONTAMINATED"] as const).map((v) => {
               const ok = v === "CORRECT";
-              const checked = bins[b.key] === v;
+              const checked = bins[b] === v;
               return (
                 <label
                   key={v}
@@ -460,14 +454,14 @@ function Checklist({
                 >
                   <input
                     type="radio"
-                    name={b.key}
+                    name={b}
                     value={v}
                     checked={checked}
-                    onChange={() => setBins((s) => ({ ...s, [b.key]: v }))}
+                    onChange={() => setBins((s) => ({ ...s, [b]: v }))}
                     className="sr-only"
                   />
                   <Icon name={ok ? "check" : "warn"} className="h-6 w-6 shrink-0" />
-                  {ok ? "Correct" : "Contaminated"}
+                  {ok ? t.bins.correct : t.bins.contaminated}
                 </label>
               );
             })}
@@ -476,10 +470,10 @@ function Checklist({
       ))}
 
       <button type="submit" disabled={!complete} aria-describedby="submit-note" className="btn btn-primary w-full py-5 text-lg">
-        Save collection
+        {c.saveCollection}
       </button>
       <p id="submit-note" className="-mt-2 text-center text-sm text-slate-green">
-        {complete ? "Points are worked out on the server when it’s sent." : "Choose Correct or Contaminated for all three bins."}
+        {complete ? c.serverScores : c.chooseAll}
       </p>
     </form>
   );

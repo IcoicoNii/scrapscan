@@ -6,7 +6,7 @@ import { requirePagePermission } from "@/lib/auth";
 import { manilaDateString } from "@/lib/dates";
 import { formatDateTime, formatPoints } from "@/lib/format";
 import { BinResultLabel } from "@/components/bin-chips";
-import { collectionStatusLabel } from "@/components/collection-status";
+import { collectionStatusLabel } from "@/lib/collection-status";
 import { EmptyState, PageHeader, StatCard } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Collections" };

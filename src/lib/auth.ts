@@ -12,17 +12,23 @@ export const getCurrentUser = cache(async () => {
   if (!session) return null;
   const user = await db.user.findUnique({
     where: { id: session.sub },
-    select: { id: true, name: true, role: true, status: true, householdId: true },
+    select: { id: true, name: true, role: true, status: true, householdId: true, mustChangePassword: true, sessionVersion: true },
   });
   if (!user || user.status !== "ACTIVE") return null;
-  return user;
+  // A password reset/change or deactivation bumps the version, which signs out every older session.
+  if (session.sv !== user.sessionVersion) return null;
+  return { id: user.id, name: user.name, role: user.role, status: user.status, householdId: user.householdId, mustChangePassword: user.mustChangePassword };
 });
+
+export const CHANGE_PASSWORD_PATH = "/change-password";
 
 /** For pages/layouts: redirects instead of throwing. */
 export async function requireRole(role: Role) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== role) redirect(homeFor(user.role));
+  // Temporary password from an admin: choose a new one before using the app.
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD_PATH);
   return user;
 }
 

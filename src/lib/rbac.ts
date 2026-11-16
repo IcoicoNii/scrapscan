@@ -20,6 +20,7 @@ export const PERMISSIONS = {
     "qr:revoke",
     "qr:reissue",
     "collection:read:all",
+    "collection:review", // decide flagged collections: release the held points or don't count them
     "points:read:all",
     "points:reverse",
     "reward:read",

@@ -1,7 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { Role } from "./rbac";
 
-export type SessionClaims = { sub: string; role: Role };
+/** sv: the account's sessionVersion when the session was made. */
+export type SessionClaims = { sub: string; role: Role; sv: number };
 
 // Collectors stay signed in long enough to sync after a day without signal.
 export const SESSION_TTL_SECONDS: Record<Role, number> = {
@@ -19,7 +20,7 @@ function key() {
 }
 
 export async function signToken(claims: SessionClaims): Promise<string> {
-  return new SignJWT({ role: claims.role })
+  return new SignJWT({ role: claims.role, sv: claims.sv })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -33,7 +34,7 @@ export async function verifyToken(token: string): Promise<SessionClaims | null> 
     const { payload } = await jwtVerify(token, k, { algorithms: ["HS256"] });
     const role = payload.role;
     if (!payload.sub || (role !== "CITIZEN" && role !== "COLLECTOR" && role !== "ADMIN")) return null;
-    return { sub: payload.sub, role };
+    return { sub: payload.sub, role, sv: typeof payload.sv === "number" ? payload.sv : 0 };
   } catch {
     return null;
   }

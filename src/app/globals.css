@@ -66,6 +66,10 @@ p { text-wrap: pretty; }
   outline: 3px solid var(--color-lawn);
   outline-offset: 2px;
 }
+/* Headings etc. that only receive focus from code (to guide screen readers) aren't tab stops: no ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
 .on-light :focus-visible,
 main.on-light :focus-visible {
   outline-color: var(--color-forest);
@@ -272,6 +276,13 @@ details[open] > .menu-panel { animation: menu-pop 160ms cubic-bezier(0.2, 0.7, 0
 
 @media print {
   .no-print { display: none !important; }
+  /* The sidebar is hidden, so the shell's grid would squeeze the page into the sidebar's column. */
+  .app-shell { display: block !important; }
   html, body { background: #fff !important; }
   .card, .table-wrap { box-shadow: none !important; }
+  /* Sticker sheet: 3 across, no page chrome, each sticker kept whole. */
+  #main:has(.sticker-sheet) { padding: 0 !important; max-width: none !important; animation: none !important; }
+  .sticker-sheet { grid-template-columns: repeat(3, 1fr) !important; gap: 4mm !important; }
+  .sticker { break-inside: avoid; border-color: #9aa !important; }
 }
+@page { margin: 10mm; }

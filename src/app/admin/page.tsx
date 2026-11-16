@@ -3,8 +3,13 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatPoints } from "@/lib/format";
+import { countFlagged } from "@/lib/reviews";
 import { Icon } from "@/components/icons";
-import { EmptyState, PageHeader, ProgressBar, SectionCard, StatCard } from "@/components/ui";
+import { PageHeader, ProgressBar, SectionCard, StatCard } from "@/components/ui";
+import { ColumnChart } from "@/components/charts";
+import { CHART_COLORS } from "@/lib/chart-colors";
+import { bucketLabel } from "@/lib/analytics";
+import { recentCollections } from "@/lib/analytics-data";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -12,13 +17,18 @@ export default async function AdminOverview() {
   await requirePagePermission("analytics:read");
 
   // Real numbers straight from the database. Zero is a valid value, not a placeholder.
-  const [households, claimed, collectors, collections, issued] = await Promise.all([
+  const [households, claimed, collectors, collections, issued, flagged, rewardRequests, pendingHouseholds] = await Promise.all([
     db.household.count({ where: { status: "ACTIVE" } }),
     db.household.count({ where: { status: "ACTIVE", claimedAt: { not: null } } }),
     db.user.count({ where: { role: "COLLECTOR", status: "ACTIVE" } }),
     db.collection.count({ where: { status: "VERIFIED" } }),
-    db.pointsLedger.aggregate({ where: { type: "AWARD" }, _sum: { points: true } }),
+    // Awards on verified collections only: a flagged collection's points are on hold.
+    db.pointsLedger.aggregate({ where: { type: "AWARD", collection: { status: "VERIFIED" } }, _sum: { points: true } }),
+    countFlagged(),
+    db.redemption.count({ where: { status: "REQUESTED" } }),
+    db.household.count({ where: { status: "PENDING" } }),
   ]);
+  const recent = await recentCollections(14);
   const signupPct = households ? Math.round((claimed / households) * 100) : 0;
 
   return (
@@ -33,6 +43,53 @@ export default async function AdminOverview() {
           </Link>
         }
       />
+
+      {flagged > 0 && (
+        <Link
+          href="/admin/reviews"
+          className="card card-link flex items-center justify-between gap-3 border-danger/20 bg-danger-soft/60"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-danger-soft text-danger">
+              <Icon name="flag" className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block font-bold">
+                {flagged} flagged {flagged === 1 ? "collection needs" : "collections need"} review
+              </span>
+              <span className="block text-sm text-slate-green">Their points are on hold until you decide.</span>
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
+
+      {pendingHouseholds > 0 && (
+        <Link href="/admin/households?status=PENDING" className="card card-link flex items-center justify-between gap-3">
+          <span className="flex items-center gap-3">
+            <span className="icon-tile h-10 w-10"><Icon name="houses" className="h-5 w-5" /></span>
+            <span>
+              <span className="block font-bold">
+                {pendingHouseholds} new household {pendingHouseholds === 1 ? "registration is" : "registrations are"} waiting for approval
+              </span>
+              <span className="block text-sm text-slate-green">Collectors can’t record them until you approve.</span>
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
+
+      {rewardRequests > 0 && (
+        <Link href="/admin/rewards" className="card card-link flex items-center justify-between gap-3">
+          <span className="flex items-center gap-3">
+            <span className="icon-tile h-10 w-10"><Icon name="gift" className="h-5 w-5" /></span>
+            <span className="font-bold">
+              {rewardRequests} reward {rewardRequests === 1 ? "request is" : "requests are"} waiting for approval
+            </span>
+          </span>
+          <Icon name="chevron-right" className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
 
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <li><StatCard label="Registered households" value={formatPoints(households)} note={`${claimed} signed up in the app`} icon="houses" /></li>
@@ -65,6 +122,20 @@ export default async function AdminOverview() {
                 <Icon name="chevron-right" className="h-5 w-5" />
               </Link>
             </li>
+            {(
+              [
+                ["/admin/households/print", "printer", "Print QR stickers"],
+                ["/admin/collections", "list", "See today’s collections"],
+                ["/admin/accounts/new", "users", "Add a collector"],
+              ] as const
+            ).map(([href, icon, label]) => (
+              <li key={href}>
+                <Link href={href} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 font-semibold transition-colors hover:border-line hover:bg-mint/60">
+                  <span className="flex items-center gap-3"><Icon name={icon} className="h-5 w-5 text-forest" />{label}</span>
+                  <Icon name="chevron-right" className="h-5 w-5" />
+                </Link>
+              </li>
+            ))}
             <li>
               <Link href="/admin/households" className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 font-semibold transition-colors hover:border-line hover:bg-mint/60">
                 <span className="flex items-center gap-3"><Icon name="houses" className="h-5 w-5 text-forest" />View households and codes</span>
@@ -75,13 +146,23 @@ export default async function AdminOverview() {
         </SectionCard>
       </div>
 
-      {collections === 0 && (
-        <EmptyState
-          icon="chart"
-          title="No collections recorded yet"
-          body="Charts and trends will appear here once collectors start submitting."
+      <SectionCard
+        id="trend"
+        title="Last 14 days"
+        action={
+          <Link href="/admin/analytics" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest hover:underline">
+            See analytics <Icon name="chevron-right" className="h-4 w-4" />
+          </Link>
+        }
+      >
+        <ColumnChart
+          title="Households collected per day"
+          height={180}
+          columns={recent.map((d) => ({ key: d.day, label: bucketLabel(d.day, "day"), values: [d.collected] }))}
+          series={[{ name: "Households collected", color: CHART_COLORS.primary }]}
+          emptyText="No collections recorded yet. The chart fills in once collectors start submitting."
         />
-      )}
+      </SectionCard>
     </div>
   );
 }

@@ -19,6 +19,11 @@ const paths = {
   trash: "M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 9Zm4 2v8h1.5v-8H10Zm2.5 0v8H14v-8h-1.5Z",
   menu: "M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z",
   "chevron-down": "M6 9.4 7.4 8l4.6 4.6L16.6 8 18 9.4l-6 6-6-6Z",
+  flag: "M5 3h2v18H5V3Zm3 1h11l-2.5 4.5L19 13H8V4Z",
+  key: "M8 10a5 5 0 1 1 4.6 5H11v2H9v2H7v2H3v-3.4l5.2-5.2A5 5 0 0 1 8 10Zm5-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z",
+  list: "M4 5h2v2H4V5Zm4 0h12v2H8V5ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2Zm-4 6h2v2H4v-2Zm4 0h12v2H8v-2Z",
+  users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0H2Zm14.5-9.2a3.5 3.5 0 1 0-1.3-6.7 6 6 0 0 1 0 6.1c.4.4.8.6 1.3.6ZM18 20h4a6 6 0 0 0-5-5.9 8.9 8.9 0 0 1 1 5.9Z",
+  printer: "M7 3h10v4H7V3ZM4 8h16a2 2 0 0 1 2 2v6h-4v5H6v-5H2v-6a2 2 0 0 1 2-2Zm4 7v4h8v-4H8Z",
 } as const;
 
 export type IconName = keyof typeof paths;

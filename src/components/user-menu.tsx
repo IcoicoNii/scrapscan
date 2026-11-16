@@ -3,13 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { logoutAction } from "@/app/actions/auth";
 import { initials } from "@/lib/format";
 import { Icon } from "./icons";
+import { LogoutForm } from "./logout-form";
+import type { NavItem } from "./nav-links";
+import { useI18n } from "./i18n";
+import { LanguageSwitch } from "./language-switch";
+import { format } from "@/lib/i18n/config";
 
 // Mobile account menu. <details> works without JS; the effect only closes it after navigating,
 // because the shell (and so this menu) stays mounted between pages.
-export function UserMenu({ userName, roleLabel, profileHref }: { userName: string; roleLabel: string; profileHref?: string }) {
+export function UserMenu({
+  userName,
+  roleLabel,
+  profileHref,
+  offlineData,
+  moreLinks = [],
+  languageSwitch = false,
+}: {
+  userName: string;
+  roleLabel: string;
+  profileHref?: string;
+  offlineData?: boolean;
+  moreLinks?: NavItem[];
+  languageSwitch?: boolean;
+}) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDetailsElement>(null);
   const pathname = usePathname();
   useEffect(() => {
@@ -20,7 +39,7 @@ export function UserMenu({ userName, roleLabel, profileHref }: { userName: strin
     <details ref={ref} className="relative">
       <summary
         className="menu-summary flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-white/10"
-        aria-label={`Account menu for ${userName}`}
+        aria-label={format(t.common.accountMenuFor, { name: userName })}
       >
         <span className="grid h-9 w-9 place-items-center rounded-full bg-lawn text-sm font-extrabold text-khaki ring-2 ring-white/25" aria-hidden="true">
           {initials(userName)}
@@ -41,15 +60,32 @@ export function UserMenu({ userName, roleLabel, profileHref }: { userName: strin
         {profileHref && (
           <Link href={profileHref} className="flex min-h-11 items-center gap-3 rounded-xl px-3 font-semibold transition-colors hover:bg-mint">
             <Icon name="user" className="h-5 w-5 text-forest" />
-            Profile
+            {t.common.profile}
           </Link>
         )}
-        <form action={logoutAction}>
-          <button className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left font-semibold transition-colors hover:bg-mint">
-            <Icon name="logout" className="h-5 w-5 text-forest" />
-            Log out
-          </button>
-        </form>
+        {moreLinks.map((l) => (
+          <Link key={l.href} href={l.href} className="flex min-h-11 items-center gap-3 rounded-xl px-3 font-semibold transition-colors hover:bg-mint">
+            <Icon name={l.icon} className="h-5 w-5 text-forest" />
+            {l.label}
+          </Link>
+        ))}
+        <Link href="/change-password" className="flex min-h-11 items-center gap-3 rounded-xl px-3 font-semibold transition-colors hover:bg-mint">
+          <Icon name="key" className="h-5 w-5 text-forest" />
+          {t.common.changePassword}
+        </Link>
+        <LogoutForm
+          offlineData={offlineData}
+          className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left font-semibold transition-colors hover:bg-mint"
+        >
+          <Icon name="logout" className="h-5 w-5 text-forest" />
+          {t.common.logOut}
+        </LogoutForm>
+        {languageSwitch && (
+          <div className="flex items-center justify-between gap-3 border-t border-line-soft px-3 pb-1 pt-3">
+            <span className="text-sm font-semibold">{t.common.language}</span>
+            <LanguageSwitch />
+          </div>
+        )}
       </div>
     </details>
   );

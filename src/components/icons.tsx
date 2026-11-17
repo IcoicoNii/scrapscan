@@ -24,6 +24,8 @@ const paths = {
   list: "M4 5h2v2H4V5Zm4 0h12v2H8V5ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2Zm-4 6h2v2H4v-2Zm4 0h12v2H8v-2Z",
   users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0H2Zm14.5-9.2a3.5 3.5 0 1 0-1.3-6.7 6 6 0 0 1 0 6.1c.4.4.8.6 1.3.6ZM18 20h4a6 6 0 0 0-5-5.9 8.9 8.9 0 0 1 1 5.9Z",
   printer: "M7 3h10v4H7V3ZM4 8h16a2 2 0 0 1 2 2v6h-4v5H6v-5H2v-6a2 2 0 0 1 2-2Zm4 7v4h8v-4H8Z",
+  play: "M8 5.1v13.8L19 12 8 5.1Z",
+  pause: "M6 5h4v14H6V5Zm8 0h4v14h-4V5Z",
 } as const;
 
 export type IconName = keyof typeof paths;

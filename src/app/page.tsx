@@ -5,9 +5,26 @@ import { homeFor } from "@/lib/rbac";
 import { BrandMark } from "@/components/brand";
 import { Icon, type IconName } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
+import Image from "next/image";
+import { LandingCarousel, type CarouselSlide } from "@/components/landing-carousel";
+import { HeroAccentSection, type HeroAccent } from "@/components/hero-accent";
 import { getI18n } from "@/lib/i18n/server";
 import { format } from "@/lib/i18n/config";
 import type { Dictionary } from "@/lib/i18n/en";
+
+// The hero's background palette for each carousel slide, sampled by eye from the campaign images.
+// The banner (slide 1) is shown below the carousel instead, so the carousel starts at slide 2.
+const HERO_ACCENTS: HeroAccent[] = [
+  { from: "#1f6e44", to: "#0c3a24" }, // 2 SDG: forest green
+  { from: "#0d7a7a", to: "#063f40" }, // 3 reward: teal
+  { from: "#0f7a4a", to: "#073d25" }, // 4 types of waste: emerald
+  { from: "#2f7d6b", to: "#123d35" }, // 5 rethink consumption: sage
+  { from: "#6b7f1a", to: "#323d09" }, // 6 be part of the change: olive moss
+  { from: "#2d6268", to: "#14363b" }, // 7 why trash matters: slate teal
+  { from: "#4b8f22", to: "#22470f" }, // 8 global waste: lime green
+  { from: "#1c5c60", to: "#0a3134" }, // 9 community actions: deep teal
+  { from: "#7a7418", to: "#3d3a0a" }, // 10 how can you help: olive gold
+];
 
 export default async function Home() {
   const user = await getCurrentUser();
@@ -30,11 +47,21 @@ export default async function Home() {
     { icon: "qr", title: l.collectors, body: l.collectorsBody },
     { icon: "chart", title: l.barangay, body: l.barangayBody },
   ];
+  // The campaign visuals live in public/landing/ as slide-01.png … slide-10.png, in display order.
+  // Slide 1 is the banner, shown full width below the carousel. The carousel takes slides 2–10.
+  const slideSrc = (i: number) => `/landing/slide-${String(i + 1).padStart(2, "0")}.png`;
+  const slides: CarouselSlide[] = l.carouselAlts.slice(1).map((alt, i) => ({ src: slideSrc(i + 1), alt }));
+  const carouselLabels = {
+    label: l.carouselLabel,
+    slideOf: l.carouselSlideOf,
+    pause: l.carouselPause,
+    play: l.carouselPlay,
+  };
 
   return (
     <PublicShell>
-      <section className="surface-forest">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-12 sm:px-6 md:grid-cols-[1.15fr_1fr] md:pb-28 md:pt-20">
+      <HeroAccentSection accents={HERO_ACCENTS} className="surface-forest">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-12 pt-12 sm:px-6 md:grid-cols-[1.15fr_1fr] md:pt-20">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-lawn ring-1 ring-inset ring-white/15">
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-lawn" />
@@ -60,6 +87,25 @@ export default async function Home() {
           </div>
           <HeroPreview t={t} />
         </div>
+
+        <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6 md:pb-28">
+          <div className="mt-6 min-w-0 md:mt-10">
+            <LandingCarousel slides={slides} labels={carouselLabels} tone="dark" />
+          </div>
+        </div>
+      </HeroAccentSection>
+
+      <section aria-label={l.carouselAlts[0]} className="mx-auto max-w-6xl px-4 pt-14 sm:px-6 md:pt-20">
+        <figure>
+          <Image
+            src={slideSrc(0)}
+            alt={l.carouselAlts[0]}
+            width={1200}
+            height={300}
+            sizes="(min-width: 1152px) 1152px, 100vw"
+            className="h-auto w-full shadow-pop"
+          />
+        </figure>
       </section>
 
       <section aria-labelledby="how" className="mx-auto max-w-6xl px-4 py-14 sm:px-6 md:py-20">
@@ -69,7 +115,7 @@ export default async function Home() {
         </h2>
         <ol className="mt-8 grid gap-4 md:grid-cols-3">
           {steps.map((s, i) => (
-            <li key={s.title} className="card relative overflow-hidden">
+            <li key={s.title} className="card-link card relative overflow-hidden">
               <span aria-hidden="true" className="absolute right-5 top-3 text-6xl font-extrabold leading-none text-mint">
                 {i + 1}
               </span>
@@ -86,17 +132,17 @@ export default async function Home() {
         </ol>
       </section>
 
-      <section aria-labelledby="points" className="border-y border-line bg-white/70">
+      <section aria-labelledby="points" className="surface-forest border-y border-white/10">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:px-6 md:grid-cols-2 md:items-center md:py-20">
           <div>
             <h2 id="points" className="text-3xl font-extrabold tracking-tight md:text-4xl">
               {l.pointsTitle}
             </h2>
-            <p className="mt-3 text-slate-green">
+            <p className="mt-3 text-white/90">
               {l.pointsBody}
             </p>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap text-black">
             <table className="data-table">
               <caption className="sr-only">{l.pointsCaption}</caption>
               <thead>
@@ -124,7 +170,7 @@ export default async function Home() {
         </h2>
         <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {audiences.map((a) => (
-            <li key={a.title} className="card">
+            <li key={a.title} className="card-link card">
               <span className="icon-tile h-12 w-12">
                 <Icon name={a.icon} className="h-6 w-6" />
               </span>
@@ -142,6 +188,23 @@ export default async function Home() {
             {l.ctaButton}
           </Link>
         </div>
+      </section>
+
+      <section aria-label={`${l.missionTitle} · ${l.visionTitle}`} className="mx-auto grid max-w-6xl gap-4 px-4 pb-14 sm:px-6 md:grid-cols-2 md:pb-20">
+        <article className="card-link card">
+          <span className="icon-tile h-12 w-12">
+            <Icon name="flag" className="h-6 w-6" />
+          </span>
+          <h2 className="mt-4 text-xl font-bold">{l.missionTitle}</h2>
+          <p className="mt-2 text-slate-green">{l.missionBody}</p>
+        </article>
+        <article className="card-link card">
+          <span className="icon-tile h-12 w-12">
+            <Icon name="leaf" className="h-6 w-6" />
+          </span>
+          <h2 className="mt-4 text-xl font-bold">{l.visionTitle}</h2>
+          <p className="mt-2 text-slate-green">{l.visionBody}</p>
+        </article>
       </section>
     </PublicShell>
   );

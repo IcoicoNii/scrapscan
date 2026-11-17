@@ -202,6 +202,7 @@ model Reward {
   description String?
   pointsCost  Int
   stock       Int?     // null = unlimited
+  imageUrl    String?  // thumbnail under /public/rewards, null = none
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 

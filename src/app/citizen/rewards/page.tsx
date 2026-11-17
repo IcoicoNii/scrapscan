@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { db } from "@/lib/db";
 import { requirePagePermission } from "@/lib/auth";
 import { formatDateTime, formatPoints } from "@/lib/format";
@@ -97,35 +98,41 @@ export default async function RewardsPage() {
       {rewards.length === 0 ? (
         <EmptyState icon="gift" title={c.noRewards} body={c.noRewardsBody} />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-4 md:grid-cols-2">
           {rewards.map((r) => {
             const enough = balance >= r.pointsCost;
             return (
-              <li key={r.id} className="card flex flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="icon-tile h-11 w-11">
-                    <Icon name="gift" className="h-6 w-6" />
-                  </span>
+              <li key={r.id} className="card flex h-full flex-col gap-5 sm:flex-row sm:items-stretch">
+                <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden rounded-xl bg-line-soft sm:aspect-auto sm:w-2/5 sm:min-h-56">
+                  {r.imageUrl ? (
+                    <Image src={r.imageUrl} alt={r.name} fill sizes="(min-width: 640px) 40vw, 100vw" className="object-cover" />
+                  ) : (
+                    <div className="grid h-full place-items-center text-slate-green">
+                      <Icon name="gift" className="h-12 w-12" />
+                    </div>
+                  )}
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${
-                      enough ? "bg-lawn text-khaki" : "bg-line-soft text-slate-green ring-1 ring-inset ring-line"
+                    className={`absolute right-3 top-3 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold shadow-sm ${
+                      enough ? "bg-lawn text-khaki" : "bg-white text-slate-green ring-1 ring-inset ring-line"
                     }`}
                   >
                     {enough && <Icon name="check" className="h-4 w-4" />}
                     {enough ? c.haveEnough : format(c.needMore, { n: formatPoints(r.pointsCost - balance, intl) })}
                   </span>
                 </div>
-                <p className="mt-4 text-lg font-bold">{r.name}</p>
-                {r.description && <p className="mt-1 text-sm text-slate-green">{r.description}</p>}
-                <div className="mt-auto space-y-2 pt-5">
-                  <p className="text-2xl font-extrabold tracking-tight tabular-nums text-forest">{formatPoints(r.pointsCost, intl)} {t.common.pts}</p>
-                  <ProgressBar value={balance} max={r.pointsCost} label={format(c.progressToward, { name: r.name })} />
-                  {r.stock !== null && (
-                    <p className="text-xs font-semibold text-slate-green">{r.stock > 0 ? format(c.left, { n: r.stock }) : c.outOfStock}</p>
-                  )}
-                  {enough && canRequest && (r.stock === null || r.stock > 0) && (
-                    <RequestRewardButton rewardId={r.id} name={r.name} cost={r.pointsCost} />
-                  )}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <p className="line-clamp-2 text-lg font-bold leading-7">{r.name}</p>
+                  {r.description && <p className="mt-1 line-clamp-3 text-sm text-slate-green">{r.description}</p>}
+                  <div className="mt-auto space-y-2 pt-5">
+                    <p className="text-2xl font-extrabold tracking-tight tabular-nums text-forest">{formatPoints(r.pointsCost, intl)} {t.common.pts}</p>
+                    <ProgressBar value={balance} max={r.pointsCost} label={format(c.progressToward, { name: r.name })} />
+                    {r.stock !== null && (
+                      <p className="text-xs font-semibold text-slate-green">{r.stock > 0 ? format(c.left, { n: r.stock }) : c.outOfStock}</p>
+                    )}
+                    {enough && canRequest && (r.stock === null || r.stock > 0) && (
+                      <RequestRewardButton rewardId={r.id} name={r.name} cost={r.pointsCost} />
+                    )}
+                  </div>
                 </div>
               </li>
             );

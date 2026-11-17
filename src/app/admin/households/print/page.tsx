@@ -77,11 +77,11 @@ export default async function PrintStickersPage({ searchParams }: { searchParams
             <fieldset className="space-y-1 text-sm">
               <legend className="mb-1 font-semibold">Also print</legend>
               <label className="flex min-h-9 items-center gap-2">
-                <input type="checkbox" name="names" defaultChecked={showNames} className="h-5 w-5 accent-forest" />
+                <input type="checkbox" name="names" defaultChecked={showNames} className="h-5 w-5 shrink-0 accent-forest" />
                 Household name on the sticker
               </label>
               <label className="flex min-h-9 items-center gap-2">
-                <input type="checkbox" name="slips" defaultChecked={showSlips} className="h-5 w-5 accent-forest" />
+                <input type="checkbox" name="slips" defaultChecked={showSlips} className="h-5 w-5 shrink-0 accent-forest" />
                 Sign-up slip (cut off, hand to the resident)
               </label>
             </fieldset>

@@ -10,7 +10,7 @@ export const PERMISSIONS = {
     "reward:read",
     "redemption:create:own",
   ],
-  COLLECTOR: ["household:lookup", "collection:create", "collection:read:own"],
+  COLLECTOR: ["household:lookup", "collection:create", "collection:read:own", "trash:analyze"],
   // Admins can NOT create collections: that keeps the "who scanned" trail honest.
   // They correct mistakes with a reversal ledger row (points:reverse), never by editing.
   ADMIN: [

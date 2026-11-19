@@ -416,6 +416,7 @@ export const fil: Translation<Dictionary> = {
     aiNotConfigured: "Hindi naka-set up ang AI scan sa server na ito. Tingnan ang mga lalagyan nang manwal.",
     aiUnclear: "Hindi malinaw ang larawan. Subukang kumuha ulit na mas malapit sa mga lalagyan, o tingnan nang manwal.",
     aiFailed: "Hindi gumana ang AI scan. Tingnan nang manwal ang mga lalagyan, o subukan ulit.",
+    aiOffline: "Offline ka, kaya hindi gumana ang AI scan. Tingnan nang manwal ang mga lalagyan.",
     cameraView: "Camera para sa pag-scan ng QR code ng household",
     startingCamera: "Binubuksan ang camera…",
     pointCamera: "Itutok ang camera sa QR code sa lalagyan.",

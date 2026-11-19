@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, requirePermission } from "@/lib/auth";
 import { changeOwnPassword, createStaffAccount, resetPassword, setAccountStatus } from "@/lib/accounts";
 import { linkResident } from "@/lib/households";
-import { createSession } from "@/lib/session";
 import { homeFor } from "@/lib/rbac";
 import { getI18n } from "@/lib/i18n/server";
 import { en } from "@/lib/i18n/en";
@@ -41,7 +40,6 @@ export async function changePasswordAction(_prev: ActionState, fd: FormData): Pr
   const { t } = user.role === "ADMIN" ? { t: en } : await getI18n(); // admin screens are English only
   const r = await changeOwnPassword(user.id, { current: fd.get("current"), password: fd.get("password"), confirm: fd.get("confirm") }, t.changePassword);
   if (!r.ok) return failed(r);
-  await createSession(user.id, user.role); // other devices are signed out; this one stays in
   redirect(homeFor(user.role));
 }
 

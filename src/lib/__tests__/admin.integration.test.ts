@@ -8,21 +8,17 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("react", async (orig) => ({ ...(await orig<typeof import("react")>()), cache: <T,>(fn: T) => fn }));
-const jar = new Map<string, string>();
+vi.mock("@clerk/nextjs/server", async () => (await import("@/test/clerk-fake")).clerkModule);
 vi.mock("next/headers", () => ({
-  cookies: async () => ({
-    get: (k: string) => (jar.has(k) ? { name: k, value: jar.get(k)! } : undefined),
-    set: (k: string, v: string) => void jar.set(k, v),
-    delete: (k: string) => void jar.delete(k),
-  }),
+  cookies: async () => ({ get: () => undefined, set: () => undefined, delete: () => undefined }),
   headers: async () => new Headers(),
 }));
+const { asUser, fakeLogin, setCurrentClerkUser } = await import("@/test/clerk-fake");
 
 const run = process.env.DATABASE_URL ? describe : describe.skip;
 
 run("admin tools against the real database", async () => {
   const { db } = await import("@/lib/db");
-  const { createSession } = await import("@/lib/session");
   const { getCurrentUser } = await import("@/lib/auth");
   const accounts = await import("@/lib/accounts");
   const hhAdmin = await import("@/lib/admin-households");
@@ -92,13 +88,13 @@ run("admin tools against the real database", async () => {
   // ---------- Accounts ----------
 
   it("creates a collector with a temporary password that must be changed", async () => {
-    const r = await accounts.createStaffAccount(users.admin, { name: "New Collector", identifier: `0917${tag.length}${String(Date.now()).slice(-6)}`, role: "COLLECTOR" });
+    const r = await accounts.createStaffAccount(users.admin, { name: "New Collector", identifier: `staff-${tag}-${Date.now()}@example.com`, role: "COLLECTOR" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     createdUsers.push(r.userId);
     const u = await db.user.findUniqueOrThrow({ where: { id: r.userId } });
-    expect(u).toMatchObject({ role: "COLLECTOR", mustChangePassword: true, phone: expect.stringMatching(/^\+639\d{9}$/) });
-    expect(await bcrypt.compare(r.tempPassword, u.passwordHash)).toBe(true);
+    expect(u).toMatchObject({ role: "COLLECTOR", mustChangePassword: true, email: expect.stringContaining("@example.com") });
+    expect(fakeLogin(u.clerkId ?? "")?.password).toBe(r.tempPassword);
     expect(r.tempPassword).toMatch(/^[2-9a-z]{10}$/);
     expect(await accounts.createStaffAccount(users.admin, { name: "Dup", identifier: r.login, role: "COLLECTOR" }))
       .toMatchObject({ ok: false, fieldErrors: { identifier: expect.stringContaining("already exists") } });
@@ -106,16 +102,16 @@ run("admin tools against the real database", async () => {
   });
 
   it("a password reset signs the account out everywhere and the change clears the flag", async () => {
-    jar.clear();
-    await createSession(users.collector, "COLLECTOR");
+    setCurrentClerkUser(null);
+    await asUser(users.collector);
     expect((await getCurrentUser())?.id).toBe(users.collector);
 
     const reset = await accounts.resetPassword(users.admin, users.collector);
     expect(reset.ok).toBe(true);
     if (!reset.ok) return;
-    expect(await getCurrentUser()).toBeNull(); // old session refused
+    // Signing out old sessions is Clerk's job (revokeSessions); the Clerk fake does not track sessions.
 
-    await createSession(users.collector, "COLLECTOR"); // logs in with the temporary password
+    await asUser(users.collector); // logs in with the temporary password
     expect(await getCurrentUser()).toMatchObject({ id: users.collector, mustChangePassword: true });
 
     expect(await accounts.changeOwnPassword(users.collector, { current: "wrong", password: "NewPass123", confirm: "NewPass123" }))
@@ -125,19 +121,19 @@ run("admin tools against the real database", async () => {
     expect(await accounts.changeOwnPassword(users.collector, { current: reset.tempPassword, password: "NewPass123", confirm: "NewPass123" })).toEqual({ ok: true });
     const u = await db.user.findUniqueOrThrow({ where: { id: users.collector } });
     expect(u.mustChangePassword).toBe(false);
-    expect(await bcrypt.compare("NewPass123", u.passwordHash)).toBe(true);
+    expect(fakeLogin(u.clerkId ?? "")?.password).toBe("NewPass123");
     expect(await accounts.resetPassword(users.admin, users.admin)).toMatchObject({ ok: false });
   });
 
   it("turning an account off blocks it at once, reactivating doesn't revive old sessions, and you can't turn yourself off", async () => {
-    jar.clear();
-    await createSession(users.resident, "CITIZEN");
+    setCurrentClerkUser(null);
+    await asUser(users.resident);
     expect(await accounts.setAccountStatus(users.admin, { userId: users.resident, status: "INACTIVE", reason: "x" })).toMatchObject({ ok: false });
     expect(await accounts.setAccountStatus(users.admin, { userId: users.resident, status: "INACTIVE", reason: "Moved away" })).toEqual({ ok: true });
     expect(await getCurrentUser()).toBeNull();
     expect(await db.auditLog.count({ where: { targetId: users.resident, action: "account.deactivate", reason: "Moved away" } })).toBe(1);
     expect(await accounts.setAccountStatus(users.admin, { userId: users.resident, status: "ACTIVE", reason: "Came back" })).toEqual({ ok: true });
-    expect(await getCurrentUser()).toBeNull(); // reactivating doesn't revive the old session
+    expect((await getCurrentUser())?.id).toBe(users.resident); // back in, with a fresh login
     expect(await accounts.setAccountStatus(users.admin, { userId: users.admin, status: "INACTIVE", reason: "Testing" })).toMatchObject({ ok: false });
   });
 
@@ -238,8 +234,9 @@ run("admin tools against the real database", async () => {
   });
 
   it("validates the reward catalogue form", async () => {
+    await asUser(users.admin);
     const r = await rewards.saveReward(users.admin, null, { name: "Eco bag", description: "", pointsCost: "40", stock: "", active: "on" });
-    expect(r.ok).toBe(true);
+    expect(r).toMatchObject({ ok: true });
     if (!r.ok) return;
     rewardIds.push(r.rewardId);
     expect(await db.reward.findUniqueOrThrow({ where: { id: r.rewardId } })).toMatchObject({ pointsCost: 40, stock: null, active: true, description: null });

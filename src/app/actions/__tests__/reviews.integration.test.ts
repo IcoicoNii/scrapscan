@@ -13,21 +13,17 @@ class Redirect extends Error {
 }
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Redirect(url); } }));
 
-const jar = new Map<string, string>();
+vi.mock("@clerk/nextjs/server", async () => (await import("@/test/clerk-fake")).clerkModule);
 vi.mock("next/headers", () => ({
-  cookies: async () => ({
-    get: (k: string) => (jar.has(k) ? { name: k, value: jar.get(k)! } : undefined),
-    set: (k: string, v: string) => void jar.set(k, v),
-    delete: (k: string) => void jar.delete(k),
-  }),
+  cookies: async () => ({ get: () => undefined, set: () => undefined, delete: () => undefined }),
   headers: async () => new Headers(),
 }));
+const { asUser, setCurrentClerkUser } = await import("@/test/clerk-fake");
 
 const run = process.env.DATABASE_URL ? describe : describe.skip;
 
 run("reviewing flagged collections against the real database", async () => {
   const { db } = await import("@/lib/db");
-  const { createSession } = await import("@/lib/session");
   const { recordCollection, FLAG_HOLD_REASON } = await import("@/lib/collections");
   const { reviewFlaggedCollection, flaggedForReview, recentDecisions, RELEASE_REASON } = await import("@/lib/reviews");
   const { reviewCollectionAction } = await import("../reviews");
@@ -41,8 +37,8 @@ run("reviewing flagged collections against the real database", async () => {
   const ALL_BAD = { biodegradable: "CONTAMINATED", recyclable: "CONTAMINATED", residual: "CONTAMINATED" } as const;
 
   const signInAs = async (who: keyof typeof users | null) => {
-    jar.clear();
-    if (who) await createSession(users[who], who === "collector" ? "COLLECTOR" : "ADMIN");
+    setCurrentClerkUser(null);
+    if (who) await asUser(users[who]);
   };
   const balance = async (i: number) =>
     (await db.pointsLedger.aggregate({ where: { householdId: hh[i].id }, _sum: { points: true } }))._sum.points ?? 0;

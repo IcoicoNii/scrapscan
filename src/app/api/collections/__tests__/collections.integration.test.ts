@@ -8,17 +8,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 vi.mock("server-only", () => ({}));
 vi.mock("react", async (orig) => ({ ...(await orig<typeof import("react")>()), cache: <T,>(fn: T) => fn }));
 
-vi.mock("@clerk/nextjs/server", async () => (await import("@/test/clerk-fake")).clerkModule);
+const jar = new Map<string, string>();
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined, set: () => undefined, delete: () => undefined }),
+  cookies: async () => ({
+    get: (k: string) => (jar.has(k) ? { name: k, value: jar.get(k)! } : undefined),
+    set: (k: string, v: string) => void jar.set(k, v),
+    delete: (k: string) => void jar.delete(k),
+  }),
   headers: async () => new Headers(),
 }));
-const { asUser, setCurrentClerkUser } = await import("@/test/clerk-fake");
 
 const run = process.env.DATABASE_URL ? describe : describe.skip;
 
 run("POST /api/collections against the real database", async () => {
   const { db } = await import("@/lib/db");
+  const { createSession } = await import("@/lib/session");
   const { POST } = await import("../route");
   const { POST: LOOKUP } = await import("../../households/lookup/route");
   const { GET: DIRECTORY } = await import("../../collector/directory/route");
@@ -34,8 +38,9 @@ run("POST /api/collections against the real database", async () => {
   const ALL_BAD = { biodegradable: "CONTAMINATED", recyclable: "CONTAMINATED", residual: "CONTAMINATED" } as const;
 
   const signInAs = async (who: keyof typeof users) => {
-    setCurrentClerkUser(null);
-    await asUser(users[who]);
+    jar.clear();
+    const role = who === "citizen" ? "CITIZEN" : who === "admin" ? "ADMIN" : "COLLECTOR";
+    await createSession(users[who], role);
   };
   const post = async (body: unknown, contentType = "application/json") => {
     const res = await POST(
@@ -227,7 +232,7 @@ run("POST /api/collections against the real database", async () => {
   });
 
   it("only lets signed-in collectors record", async () => {
-    setCurrentClerkUser(null);
+    jar.clear();
     expect((await post(collection(9))).status).toBe(401);
     await signInAs("citizen");
     expect((await post(collection(9))).status).toBe(403);
@@ -263,7 +268,7 @@ run("POST /api/collections against the real database", async () => {
   it("only collectors can look households up", async () => {
     await signInAs("citizen");
     expect((await lookup({ qrToken: hh[0].token })).status).toBe(403);
-    setCurrentClerkUser(null);
+    jar.clear();
     expect((await lookup({ qrToken: hh[0].token })).status).toBe(401);
   });
 
@@ -290,7 +295,7 @@ run("POST /api/collections against the real database", async () => {
     expect((await DIRECTORY()).status).toBe(403);
     await signInAs("admin");
     expect((await DIRECTORY()).status).toBe(403);
-    setCurrentClerkUser(null);
+    jar.clear();
     expect((await DIRECTORY()).status).toBe(401);
   });
 

@@ -67,17 +67,16 @@ model User {
   id           String        @id @default(uuid())
   email        String?       @unique // at least one of email/phone (CHECK in db-constraints.sql)
   phone        String?       @unique // normalized +639XXXXXXXXX
-  passwordHash String? // null for accounts that sign in through Clerk
+  passwordHash String
   name         String
   role         Role
   status       AccountStatus @default(ACTIVE)
   createdAt    DateTime      @default(now())
 
-  // Clerk user id (user_...). Null until the account is linked to Clerk.
-  clerkId      String?       @unique
-
   // Set when an admin gives out a temporary password: the next page load asks for a new one.
   mustChangePassword Boolean   @default(false)
+  // Stamped into every session. Bumped by a password reset/change or deactivation, which refuses all older sessions.
+  sessionVersion     Int       @default(0)
 
   // Only set for CITIZEN users (the household they claimed)
   householdId String?
@@ -87,6 +86,7 @@ model User {
   ledgerActions     PointsLedger[] @relation("LedgerActor")
   decidedRedemptions Redemption[] @relation("RedemptionDecider")
   auditLogs         AuditLog[]
+  resetTokens       PasswordResetToken[]
 
   @@index([householdId])
 }
@@ -245,4 +245,20 @@ model AuditLog {
 
   @@index([actorId, createdAt])
   @@index([targetType, targetId])
+}
+
+// ---------- Password reset by email ----------
+// Only the SHA-256 of the emailed token is stored, so a database leak can't be used to reset passwords.
+// A token works once (usedAt) and expires after 30 minutes.
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }

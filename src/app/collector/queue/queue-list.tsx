@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BinChips } from "@/components/bin-chips";
 import { Icon } from "@/components/icons";
@@ -41,7 +40,7 @@ export function QueueList({ collectorId }: { collectorId: string }) {
       {s.signedOut && pending.length > 0 && (
         <Notice tone="warn">
           {c.savedSignedOut}{" "}
-          <Link href="/login" className="font-bold underline">{t.common.signIn}</Link> {c.savedSignedOutAfter}
+          <a href="/login" className="font-bold underline">{t.common.signIn}</a> {c.savedSignedOutAfter}
         </Notice>
       )}
       {s.otherAccounts > 0 && (

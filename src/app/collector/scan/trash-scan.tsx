@@ -99,10 +99,6 @@ export function AiTrashScan({ onSuggestion }: { onSuggestion: (s: TrashSuggestio
   }
 
   async function analyzeData(data: string, category: TrashCategory) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setStatus({ kind: "error", error: "OFFLINE" });
-      return;
-    }
     setStatus({ kind: "busy" });
     try {
       const res = await fetch("/api/trash/analyze", {
@@ -149,8 +145,6 @@ export function AiTrashScan({ onSuggestion }: { onSuggestion: (s: TrashSuggestio
     status.kind === "error"
       ? status.error === "NOT_CONFIGURED"
         ? c.aiNotConfigured
-        : status.error === "OFFLINE"
-          ? c.aiOffline
         : status.error === "UNCLEAR"
           ? c.aiUnclear
           : c.aiFailed

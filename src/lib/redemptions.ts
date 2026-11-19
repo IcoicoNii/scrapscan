@@ -44,8 +44,7 @@ export const rewardSchema = z.object({
   description: z.string().trim().max(240).transform((v) => v || null),
   pointsCost: z.coerce.number({ error: "Enter the points cost." }).int("Use a whole number.").min(1, "It must cost at least 1 point.").max(1_000_000),
   stock: optionalStock,
-  // Optional: a missing picture means no picture (parseRewardImage turns anything unknown into null).
-  imageUrl: z.unknown().optional().transform(parseRewardImage),
+  imageUrl: z.unknown().transform(parseRewardImage),
   active: z.enum(["on", "off"]).default("off").transform((v) => v === "on"),
 });
 

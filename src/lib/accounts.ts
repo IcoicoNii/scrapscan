@@ -1,51 +1,30 @@
 import "server-only";
 import { randomInt } from "node:crypto";
-import { clerkClient } from "@clerk/nextjs/server";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "./db";
 import { parseLoginId } from "./identifiers";
 import { en } from "./i18n/en";
 
-// Account management for admins, plus changing your own password. Passwords live in Clerk now.
-// Admins never see or choose them: they hand out a one-time temporary password, and the next page
-// load asks for a new one.
+// Account management for admins, plus changing your own password. Admins never see or choose
+// passwords: they hand out a one-time temporary password, and the next page load asks for a new one.
 
 // Lowercase and no look-alikes (0/o, 1/l/i), so it's easy to read aloud and type on a phone.
 const TEMP_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 export const generateTempPassword = () => Array.from({ length: 10 }, () => TEMP_ALPHABET[randomInt(TEMP_ALPHABET.length)]).join("");
 
+const hash = (password: string) => bcrypt.hash(password, 12);
 const isUniqueViolation = (e: unknown) => typeof e === "object" && e !== null && "code" in e && e.code === "P2002";
-
-/** A unique Clerk username from the person's name, e.g. "club_sandwich_k7qm". Letters, digits and underscores only. */
-export const generateUsername = (name: string) => {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 20) || "user";
-  const suffix = Array.from({ length: 4 }, () => TEMP_ALPHABET[randomInt(TEMP_ALPHABET.length)]).join("");
-  return `${slug}_${suffix}`;
-};
 
 export type AccountError = { ok: false; message: string; fieldErrors?: Record<string, string> };
 
-type Clerk = Awaited<ReturnType<typeof clerkClient>>;
-
-/** Clerk's own wording when it has one, so the admin sees why a login couldn't be made. */
-function clerkErrorMessage(e: unknown): string {
-  const first = (e as { errors?: { longMessage?: string; message?: string }[] })?.errors?.[0];
-  return first?.longMessage ?? first?.message ?? "Clerk couldn’t complete that. Try again.";
-}
-
-/** Ends every active session of a Clerk user, on every device. */
-async function revokeSessions(client: Clerk, clerkId: string) {
-  const sessions = await client.sessions.getSessionList({ userId: clerkId, status: "active" });
-  for (const s of sessions.data) await client.sessions.revokeSession(s.id);
-}
-
 export const staffAccountSchema = z.object({
   name: z.string().trim().min(2, "Enter their full name.").max(80),
-  identifier: z.string().trim().min(1, "Enter their email address."),
+  identifier: z.string().trim().min(1, "Enter their email or mobile number."),
   role: z.enum(["COLLECTOR", "ADMIN"], { error: "Choose collector or admin." }),
 });
 
-/** Collectors and admins are created by an admin, with an email address (they sign in with a code sent there). Residents sign up themselves with a household code. */
+/** Collectors and admins are created by an admin. Residents sign up themselves with a household code. */
 export async function createStaffAccount(
   adminId: string,
   raw: unknown,
@@ -54,66 +33,41 @@ export async function createStaffAccount(
   if (!parsed.success) return invalid(parsed.error);
   const { name, identifier, role } = parsed.data;
   const id = parseLoginId(identifier);
-  if (!id || id.kind !== "email") {
-    return { ok: false, message: "Check the highlighted field.", fieldErrors: { identifier: "Enter a valid email address." } };
-  }
-  const email = id.value;
-  const taken = { ok: false as const, message: "Check the highlighted field.", fieldErrors: { identifier: "An account with this email already exists." } };
-  if (await db.user.findUnique({ where: { email }, select: { id: true } })) return taken;
+  if (!id) return { ok: false, message: "Check the highlighted field.", fieldErrors: { identifier: "Enter a valid email or a Philippine mobile number (09XX XXX XXXX)." } };
 
   const tempPassword = generateTempPassword();
-  const client = await clerkClient();
-  let clerkId: string;
-  try {
-    const clerkUser = await client.users.createUser({
-      emailAddress: [email],
-      emailAddressIdentificationStatus: ["verified"],
-      // This Clerk instance requires a username. Staff sign in by email, so it only needs to be unique.
-      username: generateUsername(name),
-      firstName: name,
-      password: tempPassword,
-      skipPasswordChecks: true,
-    });
-    clerkId = clerkUser.id;
-  } catch (e) {
-    return { ok: false, message: clerkErrorMessage(e) };
-  }
-
   try {
     const user = await db.$transaction(async (tx) => {
-      const u = await tx.user.create({ data: { name, role, email, clerkId, mustChangePassword: true } });
+      const u = await tx.user.create({
+        data: {
+          name, role, passwordHash: await hash(tempPassword), mustChangePassword: true,
+          ...(id.kind === "email" ? { email: id.value } : { phone: id.value }),
+        },
+      });
       await tx.auditLog.create({ data: { actorId: adminId, action: "account.create", targetType: "User", targetId: u.id, meta: { role } } });
       return u;
     });
-    return { ok: true, userId: user.id, name: user.name, login: email, tempPassword };
+    return { ok: true, userId: user.id, name: user.name, login: id.value, tempPassword };
   } catch (e) {
-    // Don't leave a login behind that has no account row.
-    await client.users.deleteUser(clerkId).catch(() => undefined);
     if (!isUniqueViolation(e)) throw e;
-    return taken;
+    return { ok: false, message: "Check the highlighted field.", fieldErrors: { identifier: "An account with this email or number already exists." } };
   }
 }
 
 /** New temporary password. Signs the account out everywhere; the old password stops working. */
 export async function resetPassword(adminId: string, userId: string): Promise<{ ok: true; tempPassword: string } | AccountError> {
   if (adminId === userId) return { ok: false, message: "To change your own password, use Change password on your profile." };
-  const target = await db.user.findUnique({ where: { id: userId }, select: { clerkId: true } });
-  if (!target) return { ok: false, message: "That account doesn’t exist." };
-  if (!target.clerkId) return { ok: false, message: "This account isn’t linked to a login yet." };
-
   const tempPassword = generateTempPassword();
-  const client = await clerkClient();
-  try {
-    await client.users.updateUser(target.clerkId, { password: tempPassword, skipPasswordChecks: true });
-  } catch (e) {
-    return { ok: false, message: clerkErrorMessage(e) };
-  }
-  await revokeSessions(client, target.clerkId);
-  await db.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: userId }, data: { mustChangePassword: true } });
-    await tx.auditLog.create({ data: { actorId: adminId, action: "account.password_reset", targetType: "User", targetId: userId } });
+  const passwordHash = await hash(tempPassword);
+  const done = await db.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId },
+      data: { passwordHash, mustChangePassword: true, sessionVersion: { increment: 1 } },
+    });
+    if (count) await tx.auditLog.create({ data: { actorId: adminId, action: "account.password_reset", targetType: "User", targetId: userId } });
+    return count > 0;
   });
-  return { ok: true, tempPassword };
+  return done ? { ok: true, tempPassword } : { ok: false, message: "That account doesn’t exist." };
 }
 
 const statusSchema = z.object({
@@ -129,36 +83,26 @@ export async function setAccountStatus(adminId: string, raw: unknown): Promise<{
   const { userId, status, reason } = parsed.data;
   if (userId === adminId) return { ok: false, message: "You can’t turn off your own account." };
 
-  // The database decides first (the last-admin rule), then Clerk is updated to match.
-  const result = await db.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { role: true, status: true, clerkId: true } });
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { role: true, status: true } });
     if (!user) return { ok: false, message: "That account doesn’t exist." } as const;
-    if (user.status === status) return { ok: true, clerkId: user.clerkId } as const;
+    if (user.status === status) return { ok: true } as const;
     if (status === "INACTIVE" && user.role === "ADMIN") {
       // Lock the admin rows so two admins can't turn each other off at the same moment.
       await tx.$queryRaw`SELECT id FROM "User" WHERE role = 'ADMIN' AND status = 'ACTIVE' FOR UPDATE`;
       const admins = await tx.user.count({ where: { role: "ADMIN", status: "ACTIVE" } });
       if (admins <= 1) return { ok: false, message: "This is the last active admin account, so it can’t be turned off." } as const;
     }
-    await tx.user.update({ where: { id: userId }, data: { status } });
+    await tx.user.update({
+      where: { id: userId },
+      // Reactivating doesn't revive old sessions: they need to log in again.
+      data: { status, sessionVersion: { increment: 1 } },
+    });
     await tx.auditLog.create({
       data: { actorId: adminId, action: status === "ACTIVE" ? "account.activate" : "account.deactivate", targetType: "User", targetId: userId, reason },
     });
-    return { ok: true, clerkId: user.clerkId } as const;
+    return { ok: true } as const;
   });
-  if (!result.ok) return result;
-
-  // Even if this Clerk call failed, the database check already refuses the account on its next request.
-  if (result.clerkId) {
-    const client = await clerkClient();
-    if (status === "INACTIVE") {
-      await client.users.banUser(result.clerkId);
-      await revokeSessions(client, result.clerkId);
-    } else {
-      await client.users.unbanUser(result.clerkId);
-    }
-  }
-  return { ok: true };
 }
 
 /** Change-password messages in one language (the page passes the reader's). */
@@ -178,26 +122,17 @@ const changePasswordSchema = (m: PasswordMessages) =>
     .refine((d) => d.password === d.confirm, { path: ["confirm"], message: m.errorMismatch })
     .refine((d) => d.password !== d.current, { path: ["password"], message: m.errorSame });
 
-/** Checks the current password with Clerk, then sets the new one. */
+/** Signs out the account's other sessions; the caller makes a fresh one for this device. */
 export async function changeOwnPassword(userId: string, raw: unknown, m: PasswordMessages = EN_PASSWORD): Promise<{ ok: true } | AccountError> {
   const parsed = changePasswordSchema(m).safeParse(raw);
   if (!parsed.success) return invalid(parsed.error);
-  const user = await db.user.findUnique({ where: { id: userId }, select: { clerkId: true } });
-  if (!user?.clerkId) return { ok: false, message: m.errorCurrent, fieldErrors: { current: m.errorCurrent } };
-
-  const client = await clerkClient();
-  try {
-    await client.users.verifyPassword({ userId: user.clerkId, password: parsed.data.current });
-  } catch {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (!user || !(await bcrypt.compare(parsed.data.current, user.passwordHash))) {
     return { ok: false, message: m.errorCurrent, fieldErrors: { current: m.errorCurrent } };
   }
-  try {
-    await client.users.updateUser(user.clerkId, { password: parsed.data.password });
-  } catch (e) {
-    return { ok: false, message: clerkErrorMessage(e), fieldErrors: { password: clerkErrorMessage(e) } };
-  }
+  const passwordHash = await hash(parsed.data.password);
   await db.$transaction([
-    db.user.update({ where: { id: userId }, data: { mustChangePassword: false } }),
+    db.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false, sessionVersion: { increment: 1 } } }),
     db.auditLog.create({ data: { actorId: userId, action: "account.password_change", targetType: "User", targetId: userId } }),
   ]);
   return { ok: true };

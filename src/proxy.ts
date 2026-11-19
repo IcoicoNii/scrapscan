@@ -1,11 +1,31 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { verifyToken } from "@/lib/jwt";
+import { AREA_ROLE, homeFor } from "@/lib/rbac";
 
-// Makes Clerk's session available to every request (auth() needs this). It does not decide access:
-// each protected layout, page and action checks the signed-in user itself (requireRole, requirePermission).
-export default clerkMiddleware();
+// Coarse gate only. Every page, action and route handler still re-checks on the server.
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const token = request.cookies.get("ss_session")?.value;
+  const session = token ? await verifyToken(token) : null;
+
+  const area = Object.keys(AREA_ROLE).find((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  if (area) {
+    if (!session) {
+      const url = new URL("/login", request.url);
+      return NextResponse.redirect(url);
+    }
+    if (session.role !== AREA_ROLE[area]) {
+      return NextResponse.redirect(new URL(homeFor(session.role), request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // /login and /register are NOT handled here: a valid cookie can belong to a deactivated account,
+  // and only the database knows. Those pages redirect signed-in users themselves (see login/page.tsx).
+  return NextResponse.next();
+}
 
 export const config = {
-  // Clerk must run on every page that reads the user (including /login, /register and /),
-  // not only the app areas, and skips static assets.
-  matcher: ["/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)", "/(api|trpc)(.*)"],
+  matcher: ["/admin/:path*", "/collector/:path*", "/citizen/:path*"],
 };

@@ -13,7 +13,7 @@ export function NewAccountForm() {
     <form action={action} noValidate className="space-y-4">
       <TextField label="Full name" name="name" defaultValue={v?.name} required error={fieldError(state, "name")} />
       <TextField
-        label="Email address"
+        label="Email or mobile number"
         name="identifier"
         defaultValue={v?.identifier}
         required

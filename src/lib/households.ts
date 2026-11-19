@@ -1,8 +1,10 @@
 import "server-only";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { HouseholdStatus } from "@prisma/client";
 import { db } from "./db";
 import { generateClaimCode, generateQrToken, normalizeClaimCode } from "./codes";
+import { parseLoginId } from "./identifiers";
 import { normalizeHouseholdCode } from "./collection-input";
 import { en } from "./i18n/en";
 import { format } from "./i18n/config";
@@ -69,6 +71,29 @@ export async function withNumberRetry<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+// ---------- Resident registration ----------
+
+function registerSchema(m: RegisterMessages) {
+  const account = z.object({
+    name: z.string().trim().min(2, m.fullName).max(80),
+    identifier: z.string().trim().min(1, m.identifier),
+    password: z.string().min(8, m.password).max(200),
+    confirm: z.string(),
+    terms: z.literal("on", { error: m.terms }),
+  });
+  return z.discriminatedUnion("mode", [
+    account.extend({
+      mode: z.literal("new"),
+      householdName: z.string().trim().min(2, m.householdName).max(80),
+      address: z.string().trim().min(3, m.address).max(160),
+      purok: z.string().trim().min(1, m.purok).max(40),
+    }),
+    account.extend({
+      mode: z.literal("join"),
+      householdCode: z.string().trim().min(1, m.code),
+    }),
+  ]);
+}
 
 export type RegisterResult =
   | { ok: true; userId: string; householdCode: string; joined: boolean }
@@ -77,6 +102,56 @@ export type RegisterResult =
 class FieldError extends Error {
   constructor(public field: string, message: string) {
     super(message);
+  }
+}
+
+/** Creates a resident account and either registers a new (PENDING) household or joins one with its sign-up code. */
+export async function registerResident(raw: Record<string, unknown>, m: RegisterMessages = EN_REGISTER): Promise<RegisterResult> {
+  const parsed = registerSchema(m).safeParse({ ...raw, mode: raw.mode === "join" ? "join" : "new" });
+  const fieldErrors: Record<string, string> = {};
+  if (!parsed.success) {
+    for (const i of parsed.error.issues) fieldErrors[String(i.path[0] ?? "form")] ??= i.message;
+  } else if (parsed.data.password !== parsed.data.confirm) {
+    fieldErrors.confirm = m.confirm;
+  }
+  const id = typeof raw.identifier === "string" ? parseLoginId(raw.identifier) : null;
+  if (!id && !fieldErrors.identifier) fieldErrors.identifier = m.identifierInvalid;
+  if (!parsed.success || Object.keys(fieldErrors).length || !id) return { ok: false, fieldErrors };
+
+  const input = parsed.data;
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const login = id.kind === "email" ? { email: id.value } : { phone: id.value };
+
+  try {
+    return await withNumberRetry(() =>
+      db.$transaction(async (tx) => {
+        if (input.mode === "new") {
+          const household = await createHousehold(
+            tx,
+            { name: input.householdName, address: input.address, purok: input.purok },
+            { status: "PENDING", selfRegistered: true, claimedAt: new Date() },
+          );
+          const user = await tx.user.create({ data: { name: input.name, role: "CITIZEN", passwordHash, householdId: household.id, ...login } });
+          await tx.auditLog.create({
+            data: { actorId: user.id, action: "household.register", targetType: "Household", targetId: household.id, meta: { code: household.code } },
+          });
+          return { ok: true, userId: user.id, householdCode: household.code, joined: false } as const;
+        }
+
+        const household = await lockHouseholdByClaimCode(tx, input.householdCode, m);
+        await assertRoomFor(tx, household.id, m);
+        const user = await tx.user.create({ data: { name: input.name, role: "CITIZEN", passwordHash, householdId: household.id, ...login } });
+        if (!household.claimedAt) await tx.household.update({ where: { id: household.id }, data: { claimedAt: new Date() } });
+        await tx.auditLog.create({
+          data: { actorId: user.id, action: "household.join", targetType: "Household", targetId: household.id, meta: { code: household.code } },
+        });
+        return { ok: true, userId: user.id, householdCode: household.code, joined: true } as const;
+      }),
+    );
+  } catch (e) {
+    if (e instanceof FieldError) return { ok: false, fieldErrors: { [e.field]: e.message } };
+    if (isLoginClash(e)) return { ok: false, fieldErrors: { identifier: m.identifierTaken } };
+    throw e;
   }
 }
 
@@ -95,81 +170,6 @@ async function assertRoomFor(tx: Tx, householdId: string, m: RegisterMessages = 
   const members = await tx.user.count({ where: { householdId } });
   if (members >= MAX_MEMBERS) {
     throw new FieldError(field, format(m.householdFull, { max: MAX_MEMBERS }));
-  }
-}
-
-// ---------- Claiming an account after Clerk sign-up ----------
-
-const claimSchema = (m: RegisterMessages) =>
-  z.discriminatedUnion("mode", [
-    z.object({
-      mode: z.literal("new"),
-      name: z.string().trim().min(2, m.fullName).max(80),
-      householdName: z.string().trim().min(2, m.householdName).max(80),
-      address: z.string().trim().min(3, m.address).max(160),
-      purok: z.string().trim().min(1, m.purok).max(40),
-    }),
-    z.object({
-      mode: z.literal("join"),
-      name: z.string().trim().min(2, m.fullName).max(80),
-      householdCode: z.string().trim().min(1, m.code),
-    }),
-  ]);
-
-export type ClaimInput = {
-  clerkId: string;
-  /** From Clerk, verified there. Either may be null, but at least one is required. */
-  email: string | null;
-  phone: string | null;
-  raw: Record<string, unknown>;
-};
-
-/**
- * Creates the resident account for a person who has just signed up with Clerk. Same household rules as
- * Same household rules as a sign-up with a claim code; credentials live in Clerk now.
- */
-export async function claimResident(input: ClaimInput, m: RegisterMessages = EN_REGISTER): Promise<RegisterResult> {
-  const parsed = claimSchema(m).safeParse({ ...input.raw, mode: input.raw.mode === "join" ? "join" : "new" });
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const i of parsed.error.issues) fieldErrors[String(i.path[0] ?? "form")] ??= i.message;
-    return { ok: false, fieldErrors };
-  }
-  if (!input.email && !input.phone) return { ok: false, fieldErrors: { form: m.identifier } };
-
-  const v = parsed.data;
-  const login = { email: input.email, phone: input.phone };
-
-  try {
-    return await withNumberRetry(() =>
-      db.$transaction(async (tx) => {
-        if (v.mode === "new") {
-          const household = await createHousehold(
-            tx,
-            { name: v.householdName, address: v.address, purok: v.purok },
-            { status: "PENDING", selfRegistered: true, claimedAt: new Date() },
-          );
-          const user = await tx.user.create({ data: { name: v.name, role: "CITIZEN", clerkId: input.clerkId, householdId: household.id, ...login } });
-          await tx.auditLog.create({
-            data: { actorId: user.id, action: "household.register", targetType: "Household", targetId: household.id, meta: { code: household.code } },
-          });
-          return { ok: true, userId: user.id, householdCode: household.code, joined: false } as const;
-        }
-
-        const household = await lockHouseholdByClaimCode(tx, v.householdCode, m);
-        await assertRoomFor(tx, household.id, m);
-        const user = await tx.user.create({ data: { name: v.name, role: "CITIZEN", clerkId: input.clerkId, householdId: household.id, ...login } });
-        if (!household.claimedAt) await tx.household.update({ where: { id: household.id }, data: { claimedAt: new Date() } });
-        await tx.auditLog.create({
-          data: { actorId: user.id, action: "household.join", targetType: "Household", targetId: household.id, meta: { code: household.code } },
-        });
-        return { ok: true, userId: user.id, householdCode: household.code, joined: true } as const;
-      }),
-    );
-  } catch (e) {
-    if (e instanceof FieldError) return { ok: false, fieldErrors: { [e.field]: e.message } };
-    if (isLoginClash(e)) return { ok: false, fieldErrors: { form: m.identifierTaken } };
-    throw e;
   }
 }
 

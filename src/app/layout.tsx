@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import "@fontsource-variable/montserrat";
 import "./globals.css";
 import { I18nProvider } from "@/components/i18n";
@@ -25,7 +24,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // The reader's language (saved choice or browser preference). Admin pages switch back to English themselves.
   const locale = await getLocale();
   return (
-    <ClerkProvider>
     <html lang={HTML_LANG[locale]}>
       <body>
         <a
@@ -37,6 +35,5 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
-    </ClerkProvider>
   );
 }

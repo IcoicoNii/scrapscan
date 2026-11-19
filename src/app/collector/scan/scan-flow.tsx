@@ -289,9 +289,9 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
           <div className="grid gap-3">
             {scanNext}
             {state.reason === "signed-out" && (
-              <Link href="/login" className="btn btn-outline w-full">
+              <a href="/login" className="btn btn-outline w-full">
                 {t.common.signIn}
-              </Link>
+              </a>
             )}
             <Link href="/collector/queue" className="btn btn-ghost w-full">
               {c.seeSaved}

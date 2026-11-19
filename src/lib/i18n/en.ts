@@ -415,7 +415,6 @@ export const en = {
     aiNotConfigured: "AI scanning isn’t set up on this server. Check the bins by hand.",
     aiUnclear: "The photo isn’t clear enough. Try again closer to the bins, or check them by hand.",
     aiFailed: "The AI scan didn’t work. Check the bins by hand, or try again.",
-    aiOffline: "You’re offline, so the AI scan can’t run. Check the bins by hand.",
     // Camera
     cameraView: "Camera view for scanning the household QR code",
     startingCamera: "Starting camera…",

@@ -43,9 +43,9 @@ export function StatCard({
 }) {
   const forest = tone === "forest";
   return (
-    <div className={forest ? "surface-forest rounded-[1.25rem] p-5 shadow-lift lg:p-6" : "card"}>
-      <div className="flex items-start justify-between gap-3">
-        <p className={`text-sm font-semibold ${forest ? "text-mint" : "text-slate-green"}`}>{label}</p>
+    <div className={`flex h-full flex-col ${forest ? "surface-forest rounded-[1.25rem] p-5 shadow-lift lg:p-6" : "card"}`}>
+      <div className="flex min-h-10 items-start justify-between gap-3">
+        <p className={`text-sm font-semibold leading-5 ${forest ? "text-mint" : "text-slate-green"}`}>{label}</p>
         {icon &&
           (forest ? (
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/12 text-lawn ring-1 ring-inset ring-white/15">

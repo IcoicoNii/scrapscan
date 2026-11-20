@@ -1,22 +1,21 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "./db";
-import { readSession } from "./session";
 import { can, homeFor, type Permission, type Role } from "./rbac";
 
-// Re-checks the database on every request so a deactivated account loses access
-// immediately, even while its cookie is still valid.
+// Clerk proves who is signed in; the database decides what they can do. Re-checked on every
+// request, so a deactivated account loses access immediately.
+// A Clerk session with no matching User row (e.g. mid-sign-up, before the claim code) counts as signed out.
 export const getCurrentUser = cache(async () => {
-  const session = await readSession();
-  if (!session) return null;
+  const { userId } = await auth();
+  if (!userId) return null;
   const user = await db.user.findUnique({
-    where: { id: session.sub },
-    select: { id: true, name: true, role: true, status: true, householdId: true, mustChangePassword: true, sessionVersion: true },
+    where: { clerkId: userId },
+    select: { id: true, name: true, role: true, status: true, householdId: true, mustChangePassword: true },
   });
   if (!user || user.status !== "ACTIVE") return null;
-  // A password reset/change or deactivation bumps the version, which signs out every older session.
-  if (session.sv !== user.sessionVersion) return null;
   return { id: user.id, name: user.name, role: user.role, status: user.status, householdId: user.householdId, mustChangePassword: user.mustChangePassword };
 });
 

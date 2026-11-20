@@ -5,8 +5,9 @@ import { decideRedemptionAction, saveRewardAction } from "@/app/actions/rewards"
 import { TextField } from "@/components/fields";
 import { FormMessages, TextAreaField, fieldError } from "@/components/form-bits";
 import type { ActionState } from "@/lib/form-state";
+import { REWARD_IMAGES } from "@/lib/reward-images";
 
-type RewardValues = { id: string; name: string; description: string | null; pointsCost: number; stock: number | null; active: boolean };
+type RewardValues = { id: string; name: string; description: string | null; pointsCost: number; stock: number | null; imageUrl: string | null; active: boolean };
 
 export function RewardForm({ reward }: { reward?: RewardValues }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveRewardAction, undefined);
@@ -33,6 +34,24 @@ export function RewardForm({ reward }: { reward?: RewardValues }) {
           hint="Leave empty for no limit."
           error={fieldError(state, "stock")}
         />
+      </div>
+      <div>
+        <label htmlFor={`${reward?.id ?? "new"}-image`} className="mb-1 block text-sm font-semibold">
+          Thumbnail (optional)
+        </label>
+        <select
+          id={`${reward?.id ?? "new"}-image`}
+          name="imageUrl"
+          defaultValue={v?.imageUrl ?? reward?.imageUrl ?? ""}
+          className="field-box"
+        >
+          <option value="">No thumbnail</option>
+          {REWARD_IMAGES.map((i) => (
+            <option key={i.url} value={i.url}>
+              {i.label}
+            </option>
+          ))}
+        </select>
       </div>
       <label className="flex min-h-11 items-center gap-3 font-semibold">
         <input type="checkbox" name="active" defaultChecked={reward ? reward.active : true} className="h-5 w-5 accent-forest" />

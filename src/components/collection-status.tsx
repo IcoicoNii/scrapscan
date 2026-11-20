@@ -34,7 +34,3 @@ export function CollectionStatusLabel({ status }: { status: CollectionStatus }) 
   const label = status === "VERIFIED" ? t.status.verified : status === "FLAGGED" ? t.status.underReview : t.status.notCounted;
   return status === "VERIFIED" ? <>{label}</> : <span className="font-semibold text-danger">{label}</span>;
 }
-
-/** English label for admin screens (not translated). */
-export const collectionStatusLabel = (status: CollectionStatus) =>
-  status === "VERIFIED" ? "Verified" : status === "FLAGGED" ? "Under review" : "Not counted";

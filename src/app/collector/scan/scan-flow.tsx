@@ -19,6 +19,7 @@ import {
   type SendOutcome,
 } from "@/lib/offline/queue";
 import { QrScanner } from "./qr-scanner";
+import { AiTrashScan } from "./trash-scan";
 import { useI18n } from "@/components/i18n";
 import { format } from "@/lib/i18n/config";
 
@@ -288,9 +289,9 @@ export function ScanFlow({ collectorId }: { collectorId: string }) {
           <div className="grid gap-3">
             {scanNext}
             {state.reason === "signed-out" && (
-              <a href="/login" className="btn btn-outline w-full">
+              <Link href="/login" className="btn btn-outline w-full">
                 {t.common.signIn}
-              </a>
+              </Link>
             )}
             <Link href="/collector/queue" className="btn btn-ghost w-full">
               {c.seeSaved}
@@ -432,6 +433,10 @@ function Checklist({
         <Icon name="arrow-left" className="h-5 w-5" />
         {c.wrongHousehold}
       </button>
+
+      <AiTrashScan
+        onSuggestion={(s) => setBins((prev) => ({ ...prev, [s.category]: s.result }))}
+      />
 
       {BINS.map((b) => (
         <fieldset key={b} className="card">

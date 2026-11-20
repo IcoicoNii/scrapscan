@@ -4,6 +4,7 @@ import { requirePagePermission } from "@/lib/auth";
 import { formatDateTime, formatPoints } from "@/lib/format";
 import { EmptyState, PageHeader, SectionCard } from "@/components/ui";
 import { RedemptionDecision, RewardForm } from "./reward-forms";
+import { RewardCatalogue } from "./reward-catalogue";
 
 export const metadata: Metadata = { title: "Rewards" };
 
@@ -70,26 +71,7 @@ export default async function AdminRewardsPage() {
           {rewards.length === 0 ? (
             <EmptyState icon="gift" title="No rewards yet" body="Add the first one so residents have something to work toward." />
           ) : (
-            <ul className="space-y-3">
-              {rewards.map((r) => (
-                <li key={r.id}>
-                  <details className="rounded-2xl border border-line">
-                    <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 [&::-webkit-details-marker]:hidden">
-                      <span className="font-semibold">
-                        {r.name}
-                        {!r.active && <span className="ml-2 text-xs font-bold text-danger">Hidden</span>}
-                      </span>
-                      <span className="text-sm text-slate-green">
-                        {formatPoints(r.pointsCost)} pts · {r.stock === null ? "no stock limit" : `${r.stock} left`}
-                      </span>
-                    </summary>
-                    <div className="border-t border-line-soft p-4">
-                      <RewardForm reward={r} />
-                    </div>
-                  </details>
-                </li>
-              ))}
-            </ul>
+            <RewardCatalogue rewards={rewards} />
           )}
         </SectionCard>
         <SectionCard id="add-reward" title="Add a reward">

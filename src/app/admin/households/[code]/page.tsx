@@ -10,7 +10,7 @@ import { householdBalance } from "@/lib/admin-households";
 import { MAX_MEMBERS, possibleDuplicates } from "@/lib/households";
 import { qrSvg } from "@/lib/qr";
 import { BinResultLabel } from "@/components/bin-chips";
-import { collectionStatusLabel } from "@/components/collection-status";
+import { collectionStatusLabel } from "@/lib/collection-status";
 import { Icon } from "@/components/icons";
 import { Notice, PageHeader, SectionCard, StatCard } from "@/components/ui";
 import {

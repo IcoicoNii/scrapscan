@@ -16,9 +16,10 @@ export async function saveRewardAction(_prev: ActionState, fd: FormData): Promis
   const id = fd.get("rewardId");
   const r = await saveReward(admin.id, typeof id === "string" && id ? id : null, {
     name: fd.get("name"), description: fd.get("description") ?? "", pointsCost: fd.get("pointsCost"), stock: fd.get("stock") ?? "",
+    imageUrl: fd.get("imageUrl"),
     active: fd.get("active") ?? "off",
   });
-  if (!r.ok) return failed(r, typedValues(fd, ["name", "description", "pointsCost", "stock"]));
+  if (!r.ok) return failed(r, typedValues(fd, ["name", "description", "pointsCost", "stock", "imageUrl"]));
   refresh();
   return { done: id ? "Reward saved." : "Reward added." };
 }

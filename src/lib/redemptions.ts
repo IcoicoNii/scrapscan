@@ -4,6 +4,7 @@ import type { RedemptionStatus } from "@prisma/client";
 import { db } from "./db";
 import { en } from "./i18n/en";
 import { format } from "./i18n/config";
+import { parseRewardImage } from "./reward-images";
 
 /** Reward messages in one language (resident actions pass the reader's; admin uses English). */
 export type RewardMessages = { [K in keyof typeof en.errors.rewards]: string };
@@ -43,6 +44,8 @@ export const rewardSchema = z.object({
   description: z.string().trim().max(240).transform((v) => v || null),
   pointsCost: z.coerce.number({ error: "Enter the points cost." }).int("Use a whole number.").min(1, "It must cost at least 1 point.").max(1_000_000),
   stock: optionalStock,
+  // Optional: a missing picture means no picture (parseRewardImage turns anything unknown into null).
+  imageUrl: z.unknown().optional().transform(parseRewardImage),
   active: z.enum(["on", "off"]).default("off").transform((v) => v === "on"),
 });
 

@@ -1,4 +1,4 @@
-// Resident self-registration, admin approval and family sign-up codes, against a real Postgres (DATABASE_URL).
+// Resident sign-up (claim), admin approval and family sign-up codes, against a real Postgres (DATABASE_URL).
 // Skipped when there is no database.
 try { process.loadEnvFile(".env"); } catch { /* CI may inject env instead */ }
 
@@ -9,9 +9,9 @@ vi.mock("server-only", () => ({}));
 
 const run = process.env.DATABASE_URL ? describe : describe.skip;
 
-run("household self-registration against the real database", async () => {
+run("household sign-up against the real database", async () => {
   const { db } = await import("@/lib/db");
-  const { registerResident, regenerateSignUpCode, linkResident, possibleDuplicates, MAX_MEMBERS } = await import("@/lib/households");
+  const { claimResident, regenerateSignUpCode, linkResident, possibleDuplicates, MAX_MEMBERS } = await import("@/lib/households");
   const { decideRegistration, setHouseholdStatus } = await import("@/lib/admin-households");
   const { lookupHousehold, recordCollection } = await import("@/lib/collections");
   const { collectorDirectory } = await import("@/lib/directory");
@@ -24,17 +24,13 @@ run("household self-registration against the real database", async () => {
   let collector = "";
   let n = 0;
 
-  const account = (extra: Record<string, string> = {}) => ({
-    name: "Test Resident",
-    identifier: `self-${tag}-${n++}@test.local`,
-    password: "longenough1",
-    confirm: "longenough1",
-    terms: "on",
-    ...extra,
-  });
-  /** Registers a new household and returns it (plus the registrant's id). */
+  /** Claims an account the way the sign-up form does: Clerk has verified the email, the form gives the household. */
+  const claim = (raw: Record<string, unknown>, email = `self-${tag}-${n++}@test.local`) =>
+    claimResident({ clerkId: `user_reg_${randomUUID()}`, email, phone: null, raw: { name: "Test Resident", terms: "on", ...raw } });
+
+  /** Signs up a new household and returns it (plus the registrant's id). */
   const registerNew = async (fields: { householdName?: string; address?: string } = {}) => {
-    const r = await registerResident(account({ mode: "new", householdName: fields.householdName ?? `Self ${tag} household`, address: fields.address ?? `Lot ${n}`, purok }));
+    const r = await claim({ mode: "new", householdName: fields.householdName ?? `Self ${tag} household`, address: fields.address ?? `Lot ${n}`, purok });
     if (!r.ok) throw new Error(JSON.stringify(r.fieldErrors));
     users.push(r.userId);
     const h = await db.household.findUniqueOrThrow({ where: { code: r.householdCode }, include: { qrCodes: true } });
@@ -42,7 +38,7 @@ run("household self-registration against the real database", async () => {
     return { h, userId: r.userId };
   };
   const join = async (code: string) => {
-    const r = await registerResident(account({ mode: "join", householdCode: code }));
+    const r = await claim({ mode: "join", householdCode: code });
     if (r.ok) users.push(r.userId);
     return r;
   };
@@ -50,8 +46,8 @@ run("household self-registration against the real database", async () => {
     recordCollection(collector, { id: randomUUID(), household: { qrToken: token }, collectedAt: new Date().toISOString(), bins: { biodegradable: "CORRECT", recyclable: "CORRECT", residual: "CORRECT" } });
 
   beforeAll(async () => {
-    const a = await db.user.create({ data: { email: `self-admin-${tag}@test.local`, name: "Test admin", role: "ADMIN", passwordHash: "x" } });
-    const c = await db.user.create({ data: { email: `self-col-${tag}@test.local`, name: "Test collector", role: "COLLECTOR", passwordHash: "x" } });
+    const a = await db.user.create({ data: { email: `self-admin-${tag}@test.local`, name: "Test admin", role: "ADMIN" } });
+    const c = await db.user.create({ data: { email: `self-col-${tag}@test.local`, name: "Test collector", role: "COLLECTOR" } });
     admin = a.id;
     collector = c.id;
   });
@@ -71,7 +67,7 @@ run("household self-registration against the real database", async () => {
     await db.$disconnect();
   });
 
-  it("a resident registers a household: PENDING, with an HH number, a QR code and an audit row", async () => {
+  it("a resident signs up with a household: PENDING, with an HH number, a QR code and an audit row", async () => {
     const { h, userId } = await registerNew();
     expect(h).toMatchObject({ status: "PENDING", selfRegistered: true, purok });
     expect(h.code).toMatch(/^HH-\d{5}$/);
@@ -81,9 +77,9 @@ run("household self-registration against the real database", async () => {
     expect(await db.auditLog.count({ where: { targetId: h.id, action: "household.register", actorId: userId } })).toBe(1);
   });
 
-  it("simultaneous registrations each get their own household number", async () => {
+  it("simultaneous sign-ups each get their own household number", async () => {
     const results = await Promise.all(
-      Array.from({ length: 4 }, (_, i) => registerResident(account({ mode: "new", householdName: `Race ${tag} ${i}`, address: `Race lot ${i}`, purok }))),
+      Array.from({ length: 4 }, (_, i) => claim({ mode: "new", householdName: `Race ${tag} ${i}`, address: `Race lot ${i}`, purok })),
     );
     expect(results.every((r) => r.ok)).toBe(true);
     const codes = results.map((r) => (r.ok ? r.householdCode : ""));
@@ -142,16 +138,17 @@ run("household self-registration against the real database", async () => {
     expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).householdId).toBe(h.id);
   });
 
-  it("validates the registration form for both choices", async () => {
-    expect(await registerResident(account({ mode: "new", householdName: "", address: "", purok: "" }))).toMatchObject({
+  it("validates the sign-up form for both choices", async () => {
+    expect(await claim({ mode: "new", householdName: "", address: "", purok: "" })).toMatchObject({
       ok: false, fieldErrors: { householdName: expect.any(String), address: expect.any(String), purok: expect.any(String) },
     });
-    expect(await registerResident(account({ mode: "join", householdCode: "" }))).toMatchObject({ ok: false, fieldErrors: { householdCode: expect.any(String) } });
-    expect(await registerResident(account({ mode: "join", householdCode: "AAAA-AAAA", confirm: "different" }))).toMatchObject({ ok: false, fieldErrors: { confirm: expect.any(String) } });
+    expect(await claim({ mode: "join", householdCode: "" })).toMatchObject({ ok: false, fieldErrors: { householdCode: expect.any(String) } });
+    expect(await claim({ mode: "join", householdCode: "AAAA-AAAA", name: "A" })).toMatchObject({ ok: false, fieldErrors: { name: expect.any(String) } });
+    // One email, one account: a second sign-up with the same email is refused.
     const { userId } = await registerNew();
     const email = (await db.user.findUniqueOrThrow({ where: { id: userId } })).email!;
-    expect(await registerResident(account({ mode: "new", identifier: email, householdName: "Dup household", address: "Lot 1", purok }))).toMatchObject({
-      ok: false, fieldErrors: { identifier: expect.stringContaining("already exists") },
+    expect(await claim({ mode: "new", householdName: "Dup household", address: "Lot 1", purok }, email)).toMatchObject({
+      ok: false, fieldErrors: { form: expect.stringContaining("already exists") },
     });
   });
 

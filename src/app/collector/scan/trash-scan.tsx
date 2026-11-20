@@ -224,7 +224,6 @@ export function AiTrashScan({ onSuggestion }: { onSuggestion: (s: TrashSuggestio
               ref={inputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               disabled={!expected || busy}
               className="sr-only"
               onChange={(e) => {

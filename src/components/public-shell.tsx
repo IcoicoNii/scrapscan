@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BrandMark, Wordmark } from "./brand";
 import { useI18n } from "./i18n";
 import { LanguageSwitch } from "./language-switch";
+import { SiteFooter } from "./site-footer";
 
 // Header and footer for pages anyone can open (landing, terms, privacy).
 export function PublicShell({ children }: { children: React.ReactNode }) {
@@ -32,26 +33,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <footer className="on-light border-t border-line bg-white/70 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-6 text-sm text-slate-green sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p className="flex items-center gap-2">
-            <BrandMark className="h-5 w-5 text-forest" />
-            ScrapScan · {t.common.pilot}
-          </p>
-          <ul className="flex gap-1">
-            <li>
-              <Link href="/terms" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">
-                {t.common.terms}
-              </Link>
-            </li>
-            <li>
-              <Link href="/privacy" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">
-                {t.common.privacy}
-              </Link>
-            </li>
-          </ul>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

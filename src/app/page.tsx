@@ -190,7 +190,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section aria-label={`${l.missionTitle} · ${l.visionTitle}`} className="mx-auto grid max-w-6xl gap-4 px-4 pb-14 sm:px-6 md:grid-cols-2 md:pb-20">
+      <section id="about" aria-label={`${l.missionTitle} · ${l.visionTitle}`} className="mx-auto grid max-w-6xl gap-4 px-4 pb-14 sm:px-6 md:grid-cols-2 md:pb-20">
         <article className="card-link card">
           <span className="icon-tile h-12 w-12">
             <Icon name="flag" className="h-6 w-6" />

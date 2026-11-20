@@ -44,6 +44,8 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* In-page links (/#how etc.) land below the sticky header, not under it. */
+  scroll-padding-top: 5rem;
 }
 
 body {

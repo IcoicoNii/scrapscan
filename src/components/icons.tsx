@@ -26,6 +26,8 @@ const paths = {
   printer: "M7 3h10v4H7V3ZM4 8h16a2 2 0 0 1 2 2v6h-4v5H6v-5H2v-6a2 2 0 0 1 2-2Zm4 7v4h8v-4H8Z",
   play: "M8 5.1v13.8L19 12 8 5.1Z",
   pause: "M6 5h4v14H6V5Zm8 0h4v14h-4V5Z",
+  mail: "M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2 8 5 8-5H4Zm0 2.4V17h16V9.4l-8 5-8-5Z",
+  pin: "M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Zm0 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5Z",
 } as const;
 
 export type IconName = keyof typeof paths;
